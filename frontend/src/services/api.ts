@@ -113,7 +113,9 @@ export function createAppApiClient(options: AppApiClientOptions = {}): AppApiCli
       requestSizeBytes = new Blob([bodyStr]).size;
     }
 
-    // 6. Measure request duration
+    // 6. Capture active session ID at the beginning of domain request (before await)
+    const initiatingSessionId = getSessionId();
+
     const t0 = performance.now();
     const clientTimestamp = Date.now();
     let statusCode = 0;
@@ -161,11 +163,15 @@ export function createAppApiClient(options: AppApiClientOptions = {}): AppApiCli
     } finally {
       const responseTimeMs = Math.round((performance.now() - t0) * 100) / 100;
 
-      // 7. Emit API Telemetry ONLY if an active session is currently bound
-      const activeSessionId = getSessionId();
-      if (activeSessionId && activeSessionId.trim().length > 0) {
+      // 7. Emit API Telemetry ONLY if initiating session is still the active session
+      const currentSessionId = getSessionId();
+      if (
+        initiatingSessionId &&
+        initiatingSessionId.trim().length > 0 &&
+        initiatingSessionId === currentSessionId
+      ) {
         const telemetryRecord: ApiTelemetryRecord = {
-          session_id: activeSessionId,
+          session_id: initiatingSessionId,
           endpoint: endpointPath,
           http_method: method,
           status_code: statusCode,

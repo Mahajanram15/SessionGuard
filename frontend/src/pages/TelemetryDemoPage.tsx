@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { MousePointer, Key, ArrowUpDown, Compass, Check, Bot, User, ListChecks, Download, Activity, AlertCircle } from 'lucide-react';
 import { BehavioralSDK, TelemetryStats } from '@behavioral-integrity/sdk';
 import { TelemetryStatusPanel } from '../components/TelemetryStatusPanel';
@@ -85,19 +85,69 @@ export const TelemetryDemoPage: React.FC<TelemetryDemoPageProps> = ({
     });
   }, [sdk, onRefreshStats]);
 
+  // Search debounce timer ref (Experiment B regression prevention)
+  const searchDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // TASK_02: Debounced search triggering when typing query in sandbox (500ms delay)
   useEffect(() => {
-    if (selectedTask !== 'TASK_02' || !demoTextInput.trim() || demoTextInput.trim().length < 2) return;
-    const timer = setTimeout(async () => {
+    if (searchDebounceTimerRef.current) {
+      clearTimeout(searchDebounceTimerRef.current);
+      searchDebounceTimerRef.current = null;
+    }
+
+    if (selectedTask !== 'TASK_02' || !demoTextInput.trim() || demoTextInput.trim().length < 2) {
+      return;
+    }
+
+    searchDebounceTimerRef.current = setTimeout(async () => {
       const res = await appClient.search(demoTextInput.trim(), 5);
       if (res.error) {
         setApiError(res.error.message);
       } else {
         setApiError(null);
       }
+      searchDebounceTimerRef.current = null;
     }, 500);
-    return () => clearTimeout(timer);
+
+    return () => {
+      if (searchDebounceTimerRef.current) {
+        clearTimeout(searchDebounceTimerRef.current);
+        searchDebounceTimerRef.current = null;
+      }
+    };
   }, [demoTextInput, selectedTask, appClient]);
+
+  // Clean up any pending search debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (searchDebounceTimerRef.current) {
+        clearTimeout(searchDebounceTimerRef.current);
+        searchDebounceTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  const handleSearchSubmit = async () => {
+    const query = demoTextInput.trim();
+    if (!query) return;
+
+    // Clear any pending debounced timer before executing deliberate search
+    if (searchDebounceTimerRef.current) {
+      clearTimeout(searchDebounceTimerRef.current);
+      searchDebounceTimerRef.current = null;
+    }
+
+    try {
+      const res = await appClient.search(query, 5);
+      if (res.error) {
+        setApiError(res.error.message);
+      } else {
+        setApiError(null);
+      }
+    } catch (err: any) {
+      setApiError(err.message || 'Search failed');
+    }
+  };
 
   const handleStart = async () => {
     setLoading(true);
@@ -164,7 +214,9 @@ export const TelemetryDemoPage: React.FC<TelemetryDemoPageProps> = ({
           await appClient.getCatalog('laptops');
         }
       } else if (route === '/demo/landing') {
-        await appClient.getCatalog();
+        if (selectedTask === 'TASK_03') {
+          await appClient.getCatalog();
+        }
       } else if (route === '/demo/cart') {
         if (selectedTask === 'TASK_03') {
           await appClient.addCartItem('prod_01', 1);
@@ -581,19 +633,15 @@ export const TelemetryDemoPage: React.FC<TelemetryDemoPageProps> = ({
                   onRefreshStats();
                 }}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && demoTextInput.trim()) {
-                    appClient.search(demoTextInput.trim(), 5);
+                  if (e.key === 'Enter') {
+                    handleSearchSubmit();
                   }
                 }}
                 placeholder="Type query (e.g. 'laptop'). Debounced 500ms or press Enter..."
                 className="flex-1 px-3.5 py-2 rounded-lg bg-surface-elevated border border-border text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-primary-500 font-sans"
               />
               <button
-                onClick={() => {
-                  if (demoTextInput.trim()) {
-                    appClient.search(demoTextInput.trim(), 5);
-                  }
-                }}
+                onClick={handleSearchSubmit}
                 className="px-3 py-2 rounded-lg bg-primary-600 hover:bg-primary-500 text-white text-xs font-medium transition-colors"
               >
                 Search
