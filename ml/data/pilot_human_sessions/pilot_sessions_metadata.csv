@@ -1,0 +1,4 @@
+session_id,task_id,participant_id,collection_mode,label,status,start_time,end_time,duration_seconds,total_browser_events,total_api_requests,screen_resolution,client_timezone,collection_timestamp
+sess_fabbd10f3c1c40338f16,TASK_01,p_01,HUMAN,0,COMPLETED,2026-10-16T06:53:54.155357,2026-10-16T06:59:48.470962,354.32,970,3,1536x864,Asia/Calcutta,1792113834155
+sess_90815ffc1d8f465791d1,TASK_02,p_02,HUMAN,0,COMPLETED,2026-10-16T07:01:43.357552,2026-10-16T07:03:46.914314,123.56,343,86,1536x864,Asia/Calcutta,1792114303357
+sess_054acab940714e99b8e9,TASK_03,p_03,HUMAN,0,COMPLETED,2026-10-16T07:45:20.416381,2026-10-16T07:48:28.039483,187.62,981,5,1536x864,Asia/Calcutta,1792116920416
