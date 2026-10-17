@@ -92,10 +92,11 @@ export const TelemetryDemoPage: React.FC<TelemetryDemoPageProps> = ({
   }, [sdk]);
 
   // Search debounce timer and last debounced query refs (Experiment B regression prevention)
+  const SEARCH_DEBOUNCE_DELAY_MS = 1000;
   const searchDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastDebouncedQueryRef = useRef<string>('');
 
-  // TASK_02: Debounced search triggering when typing query in sandbox (500ms delay)
+  // TASK_02: Debounced search triggering when typing query in sandbox (1000ms delay)
   useEffect(() => {
     if (searchDebounceTimerRef.current) {
       clearTimeout(searchDebounceTimerRef.current);
@@ -127,7 +128,7 @@ export const TelemetryDemoPage: React.FC<TelemetryDemoPageProps> = ({
         setApiError(null);
       }
       searchDebounceTimerRef.current = null;
-    }, 500);
+    }, SEARCH_DEBOUNCE_DELAY_MS);
 
     return () => {
       if (searchDebounceTimerRef.current) {
@@ -663,14 +664,13 @@ export const TelemetryDemoPage: React.FC<TelemetryDemoPageProps> = ({
                 value={demoTextInput}
                 onChange={(e) => {
                   setDemoTextInput(e.target.value);
-                  onRefreshStats();
                 }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     handleSearchSubmit();
                   }
                 }}
-                placeholder="Type query (e.g. 'laptop'). Debounced 500ms or press Enter..."
+                placeholder="Type query (e.g. 'laptop'). Debounced 1000ms or press Enter..."
                 className="flex-1 px-3.5 py-2 rounded-lg bg-surface-elevated border border-border text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-primary-500 font-sans"
               />
               <button

@@ -152,9 +152,10 @@ async function simulateNavigation(route, selectedTask, appClient, mockFetch) {
 // ------------------------------------------------------------------------------
 // Simulated Search Controller matching frontend/src/pages/TelemetryDemoPage.tsx
 // ------------------------------------------------------------------------------
-function createSearchController(selectedTask, appClient, mockFetch) {
+function createSearchController(selectedTask, appClient, mockFetch, debounceDelayMs = 300) {
   let searchDebounceTimer = null;
   let textInput = '';
+  let lastDebouncedQuery = '';
 
   function onType(newText) {
     textInput = newText;
@@ -162,13 +163,23 @@ function createSearchController(selectedTask, appClient, mockFetch) {
       clearTimeout(searchDebounceTimer);
       searchDebounceTimer = null;
     }
-    if (selectedTask !== 'TASK_02' || !newText.trim() || newText.trim().length < 2) {
+    if (selectedTask !== 'TASK_02') {
+      lastDebouncedQuery = '';
+      return;
+    }
+    const query = newText.trim();
+    if (!query || query.length < 2) {
+      lastDebouncedQuery = '';
+      return;
+    }
+    if (query === lastDebouncedQuery) {
       return;
     }
     searchDebounceTimer = setTimeout(async () => {
-      await appClient.search(newText.trim(), 5, mockFetch);
+      lastDebouncedQuery = query;
+      await appClient.search(query, 5, mockFetch);
       searchDebounceTimer = null;
-    }, 500);
+    }, debounceDelayMs);
   }
 
   async function handleSearchSubmit() {
@@ -178,6 +189,7 @@ function createSearchController(selectedTask, appClient, mockFetch) {
       clearTimeout(searchDebounceTimer);
       searchDebounceTimer = null;
     }
+    lastDebouncedQuery = query;
     await appClient.search(query, 5, mockFetch);
   }
 
@@ -250,20 +262,20 @@ test('3. Search typing followed by Enter produces exactly one request', async ()
     return { ok: true, status: 200, data: { results: [] } };
   };
 
-  const controller = createSearchController('TASK_02', client, mockFetch);
+  const controller = createSearchController('TASK_02', client, mockFetch, 200);
 
   // User types query
   controller.onType('ultrabook');
   assert.equal(fetchCount, 0);
 
-  // User hits Enter after 100ms (before the 500ms debounce expires)
-  await new Promise((r) => setTimeout(r, 100));
+  // User hits Enter after 50ms (before the 200ms debounce expires)
+  await new Promise((r) => setTimeout(r, 50));
   await controller.handleSearchSubmit();
   assert.equal(fetchCount, 1);
   assert.equal(client.emittedRecords.length, 1);
 
-  // Wait beyond original debounce delay (total > 500ms)
-  await new Promise((r) => setTimeout(r, 500));
+  // Wait beyond original debounce delay
+  await new Promise((r) => setTimeout(r, 300));
 
   // Verify no duplicate second request was fired
   assert.equal(fetchCount, 1);
@@ -281,20 +293,20 @@ test('4. Search typing followed by clicking Search produces exactly one request'
     return { ok: true, status: 200, data: { results: [] } };
   };
 
-  const controller = createSearchController('TASK_02', client, mockFetch);
+  const controller = createSearchController('TASK_02', client, mockFetch, 200);
 
   // User types query
   controller.onType('mechanical keyboard');
   assert.equal(fetchCount, 0);
 
-  // User clicks Search button after 150ms
-  await new Promise((r) => setTimeout(r, 150));
+  // User clicks Search button after 50ms
+  await new Promise((r) => setTimeout(r, 50));
   await controller.handleSearchSubmit();
   assert.equal(fetchCount, 1);
   assert.equal(client.emittedRecords.length, 1);
 
   // Wait beyond original debounce delay
-  await new Promise((r) => setTimeout(r, 500));
+  await new Promise((r) => setTimeout(r, 300));
 
   // Verify no duplicate second request was fired
   assert.equal(fetchCount, 1);
@@ -312,18 +324,154 @@ test('5. Debounced search still works when the user does not submit immediately'
     return { ok: true, status: 200, data: { results: [] } };
   };
 
-  const controller = createSearchController('TASK_02', client, mockFetch);
+  const controller = createSearchController('TASK_02', client, mockFetch, 200);
 
   // User types query and waits
   controller.onType('monitor 4k');
   assert.equal(fetchCount, 0);
 
-  // Wait 600ms for debounce timer to fire naturally
-  await new Promise((r) => setTimeout(r, 600));
+  // Wait 300ms for debounce timer to fire naturally
+  await new Promise((r) => setTimeout(r, 300));
 
   assert.equal(fetchCount, 1);
   assert.equal(client.emittedRecords.length, 1);
   assert.equal(client.emittedRecords[0].endpoint, '/api/search');
+
+  controller.unmount();
+});
+
+test('9. Typing quickly sends 0 intermediate requests and exactly 1 request for the final query', async () => {
+  let activeSession = 'sess_search_fast';
+  const client = createAppApiClient({ getSessionId: () => activeSession });
+  let fetchCount = 0;
+  let lastSearchedQuery = '';
+  const mockFetch = async (url) => {
+    fetchCount++;
+    lastSearchedQuery = new URL(url).searchParams.get('q');
+    return { ok: true, status: 200, data: { results: [] } };
+  };
+
+  const controller = createSearchController('TASK_02', client, mockFetch, 200);
+
+  // Fast typing: keystrokes arrive in rapid succession (e.g. 30ms apart)
+  const sequence = ['w', 'wi', 'wir', 'wire', 'wirel', 'wirele', 'wireles', 'wireless'];
+  for (const snippet of sequence) {
+    controller.onType(snippet);
+    await new Promise((r) => setTimeout(r, 30));
+  }
+
+  // During rapid typing, zero requests should have been dispatched
+  assert.equal(fetchCount, 0);
+
+  // Wait for the debounce delay to expire after the last keystroke
+  await new Promise((r) => setTimeout(r, 250));
+
+  // Exactly one request was sent for the final query
+  assert.equal(fetchCount, 1);
+  assert.equal(lastSearchedQuery, 'wireless');
+
+  controller.unmount();
+});
+
+test('10. Typing slowly sends 0 intermediate requests and exactly 1 request for the final query', async () => {
+  let activeSession = 'sess_search_slow';
+  const client = createAppApiClient({ getSessionId: () => activeSession });
+  let fetchCount = 0;
+  let lastSearchedQuery = '';
+  const mockFetch = async (url) => {
+    fetchCount++;
+    lastSearchedQuery = new URL(url).searchParams.get('q');
+    return { ok: true, status: 200, data: { results: [] } };
+  };
+
+  // 250ms debounce window; keystrokes arrive with pauses of 120ms (less than debounce window)
+  const controller = createSearchController('TASK_02', client, mockFetch, 250);
+
+  const snippets = [
+    'wi',
+    'wire',
+    'wireless',
+    'wireless ',
+    'wireless head',
+    'wireless headphones'
+  ];
+
+  for (const snippet of snippets) {
+    controller.onType(snippet);
+    await new Promise((r) => setTimeout(r, 120));
+    // Verify that NO partial request fired between slow keystrokes
+    assert.equal(fetchCount, 0);
+  }
+
+  // Still 0 requests during the slow typing sequence
+  assert.equal(fetchCount, 0);
+
+  // Now the user stops typing and waits
+  await new Promise((r) => setTimeout(r, 320));
+
+  // Exactly ONE request for the complete final query
+  assert.equal(fetchCount, 1);
+  assert.equal(lastSearchedQuery, 'wireless headphones');
+
+  controller.unmount();
+});
+
+test('11. Waiting after typing sends zero additional requests', async () => {
+  let activeSession = 'sess_search_wait';
+  const client = createAppApiClient({ getSessionId: () => activeSession });
+  let fetchCount = 0;
+  const mockFetch = async () => {
+    fetchCount++;
+    return { ok: true, status: 200, data: { results: [] } };
+  };
+
+  const controller = createSearchController('TASK_02', client, mockFetch, 150);
+
+  controller.onType('ergonomic chair');
+  assert.equal(fetchCount, 0);
+
+  // Wait for debounce to fire
+  await new Promise((r) => setTimeout(r, 200));
+  assert.equal(fetchCount, 1);
+
+  // User sits idle for an extended period without typing
+  await new Promise((r) => setTimeout(r, 400));
+
+  // Count must remain 1 — zero additional searches during idleness
+  assert.equal(fetchCount, 1);
+
+  controller.unmount();
+});
+
+test('12. Intentional repeated Search button clicks dispatch every deliberate search', async () => {
+  let activeSession = 'sess_search_repeat_click';
+  const client = createAppApiClient({ getSessionId: () => activeSession });
+  let fetchCount = 0;
+  const mockFetch = async () => {
+    fetchCount++;
+    return { ok: true, status: 200, data: { results: [] } };
+  };
+
+  const controller = createSearchController('TASK_02', client, mockFetch, 200);
+
+  controller.onType('noise cancelling');
+  assert.equal(fetchCount, 0);
+
+  // Click Search immediately
+  await controller.handleSearchSubmit();
+  assert.equal(fetchCount, 1);
+
+  // Wait beyond debounce
+  await new Promise((r) => setTimeout(r, 250));
+  assert.equal(fetchCount, 1);
+
+  // Click Search button a second time intentionally for the same query
+  await controller.handleSearchSubmit();
+  assert.equal(fetchCount, 2);
+
+  // Click Search button a third time intentionally
+  await controller.handleSearchSubmit();
+  assert.equal(fetchCount, 3);
 
   controller.unmount();
 });
