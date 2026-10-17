@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Navbar } from './components/Navbar';
 import { DashboardShell } from './pages/DashboardShell';
 import { TelemetryDemoPage } from './pages/TelemetryDemoPage';
@@ -25,9 +25,9 @@ export const App: React.FC = () => {
 
   const [sdkStats, setSdkStats] = useState<TelemetryStats>(() => sdk.getStats());
 
-  const refreshSdkStats = () => {
+  const refreshSdkStats = useCallback(() => {
     setSdkStats(sdk.getStats());
-  };
+  }, [sdk]);
 
   // Poll SDK stats periodically to reflect live background buffer flushes
   useEffect(() => {
@@ -35,7 +35,7 @@ export const App: React.FC = () => {
       refreshSdkStats();
     }, 1000);
     return () => clearInterval(timer);
-  }, [sdk]);
+  }, [refreshSdkStats]);
 
   useEffect(() => {
     async function loadInitialData() {

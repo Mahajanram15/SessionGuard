@@ -72,6 +72,12 @@ export const TelemetryDemoPage: React.FC<TelemetryDemoPageProps> = ({
   const [apiActivityLog, setApiActivityLog] = useState<string[]>([]);
   const [apiError, setApiError] = useState<string | null>(null);
 
+  // Keep latest onRefreshStats in a ref so appClient reference remains completely stable
+  const onRefreshStatsRef = useRef(onRefreshStats);
+  useEffect(() => {
+    onRefreshStatsRef.current = onRefreshStats;
+  }, [onRefreshStats]);
+
   // Initialize explicit domain API client with active SDK session binding
   const appClient = useMemo(() => {
     return createAppApiClient({
@@ -80,13 +86,14 @@ export const TelemetryDemoPage: React.FC<TelemetryDemoPageProps> = ({
         setLastApiTelemetry(rec);
         const logEntry = `[${rec.http_method}] ${rec.endpoint} (${rec.status_code}) - ${rec.response_time_ms}ms`;
         setApiActivityLog((prev) => [logEntry, ...prev.slice(0, 3)]);
-        onRefreshStats();
+        onRefreshStatsRef.current?.();
       },
     });
-  }, [sdk, onRefreshStats]);
+  }, [sdk]);
 
-  // Search debounce timer ref (Experiment B regression prevention)
+  // Search debounce timer and last debounced query refs (Experiment B regression prevention)
   const searchDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastDebouncedQueryRef = useRef<string>('');
 
   // TASK_02: Debounced search triggering when typing query in sandbox (500ms delay)
   useEffect(() => {
@@ -95,12 +102,25 @@ export const TelemetryDemoPage: React.FC<TelemetryDemoPageProps> = ({
       searchDebounceTimerRef.current = null;
     }
 
-    if (selectedTask !== 'TASK_02' || !demoTextInput.trim() || demoTextInput.trim().length < 2) {
+    if (selectedTask !== 'TASK_02') {
+      lastDebouncedQueryRef.current = '';
+      return;
+    }
+
+    const query = demoTextInput.trim();
+    if (!query || query.length < 2) {
+      lastDebouncedQueryRef.current = '';
+      return;
+    }
+
+    // Prevent duplicate automated search if the query text hasn't changed since last debounced dispatch
+    if (query === lastDebouncedQueryRef.current) {
       return;
     }
 
     searchDebounceTimerRef.current = setTimeout(async () => {
-      const res = await appClient.search(demoTextInput.trim(), 5);
+      lastDebouncedQueryRef.current = query;
+      const res = await appClient.search(query, 5);
       if (res.error) {
         setApiError(res.error.message);
       } else {
@@ -137,6 +157,9 @@ export const TelemetryDemoPage: React.FC<TelemetryDemoPageProps> = ({
       searchDebounceTimerRef.current = null;
     }
 
+    // Mark query as debounced so an upcoming debounce won't duplicate this deliberate search
+    lastDebouncedQueryRef.current = query;
+
     try {
       const res = await appClient.search(query, 5);
       if (res.error) {
@@ -154,6 +177,11 @@ export const TelemetryDemoPage: React.FC<TelemetryDemoPageProps> = ({
     setExportNotice(null);
     setClickCount(0);
     setDemoTextInput('');
+    lastDebouncedQueryRef.current = '';
+    if (searchDebounceTimerRef.current) {
+      clearTimeout(searchDebounceTimerRef.current);
+      searchDebounceTimerRef.current = null;
+    }
     setLastClickedCategory('None');
     setLastApiTelemetry(null);
     setApiActivityLog([]);
@@ -175,6 +203,11 @@ export const TelemetryDemoPage: React.FC<TelemetryDemoPageProps> = ({
   };
 
   const handleStop = async () => {
+    if (searchDebounceTimerRef.current) {
+      clearTimeout(searchDebounceTimerRef.current);
+      searchDebounceTimerRef.current = null;
+    }
+    lastDebouncedQueryRef.current = '';
     setLoading(true);
     try {
       await sdk.stop(`${collectionMode}_${selectedTask}_COMPLETED`);
