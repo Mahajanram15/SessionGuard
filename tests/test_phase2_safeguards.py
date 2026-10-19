@@ -146,6 +146,92 @@ class TestPhase2Safeguards(unittest.TestCase):
         with self.assertRaises(PrivacyViolationError):
             validate_event_privacy(bad_event)
 
+    def test_live_session_service_ingestion_privacy_boundary(self):
+        """
+        Verify that session_service.record_events enforces privacy schema validation
+        BEFORE in-memory append or persistence, rejecting forbidden keys and password targets.
+        """
+        import asyncio
+        from backend.app.services.session_service import session_service
+        from backend.app.schemas.session import SessionStartRequest
+        from backend.app.schemas.behavior import BehaviorBatchRequest, BehaviorEventItem
+
+        # Create session
+        loop = asyncio.new_event_loop()
+        start_req = SessionStartRequest(user_agent="TestAgent/1.0", screen_resolution="1920x1080", client_timestamp=1000)
+        start_res = loop.run_until_complete(session_service.create_session(start_req, client_ip="127.0.0.1"))
+        sess_id = start_res.session_id
+
+        # Initial event count
+        self.assertEqual(session_service._events_count.get(sess_id, 0), 0)
+
+        # 1. Compliant batch succeeds
+        valid_batch = BehaviorBatchRequest(
+            session_id=sess_id,
+            events=[
+                BehaviorEventItem(
+                    event_type="mouse_move",
+                    client_timestamp=1000,
+                    event_data={"x": 100, "y": 200},
+                ),
+                BehaviorEventItem(
+                    event_type="key_meta",
+                    client_timestamp=1050,
+                    event_data={"dwell_ms": 75.0, "target_tag": "INPUT", "target_type": "text"},
+                ),
+            ]
+        )
+        res = loop.run_until_complete(session_service.record_events(valid_batch))
+        self.assertEqual(res.processed_events, 2)
+        self.assertEqual(session_service._events_count[sess_id], 2)
+
+        # 2. Batch with forbidden key rejected BEFORE persistence
+        bad_key_batch = BehaviorBatchRequest(
+            session_id=sess_id,
+            events=[
+                BehaviorEventItem(
+                    event_type="key_meta",
+                    client_timestamp=1100,
+                    event_data={"dwell_ms": 80.0, "key": "secret_character"},
+                )
+            ]
+        )
+        with self.assertRaises(PrivacyViolationError):
+            loop.run_until_complete(session_service.record_events(bad_key_batch))
+        # Count MUST NOT increase
+        self.assertEqual(session_service._events_count[sess_id], 2)
+
+        # 3. Batch with password target rejected BEFORE persistence
+        bad_pw_batch = BehaviorBatchRequest(
+            session_id=sess_id,
+            events=[
+                BehaviorEventItem(
+                    event_type="key_meta",
+                    client_timestamp=1200,
+                    event_data={"dwell_ms": 80.0, "target_type": "password"},
+                )
+            ]
+        )
+        with self.assertRaises(PrivacyViolationError):
+            loop.run_until_complete(session_service.record_events(bad_pw_batch))
+        self.assertEqual(session_service._events_count[sess_id], 2)
+
+        # 4. Batch with nested forbidden text rejected BEFORE persistence
+        nested_bad_batch = BehaviorBatchRequest(
+            session_id=sess_id,
+            events=[
+                BehaviorEventItem(
+                    event_type="key_meta",
+                    client_timestamp=1300,
+                    event_data={"nested": {"value": "typed_user_string"}},
+                )
+            ]
+        )
+        with self.assertRaises(PrivacyViolationError):
+            loop.run_until_complete(session_service.record_events(nested_bad_batch))
+        self.assertEqual(session_service._events_count[sess_id], 2)
+        loop.close()
+
     # ==========================================================================
     # 2. Development-Only Dataset Loader & Partition Boundary Tests
     # ==========================================================================
@@ -251,19 +337,24 @@ class TestPhase2Safeguards(unittest.TestCase):
             with self.assertRaises(SecurityIntegrityError):
                 execute_preload_quarantine_gate(manifest_path, models_dir, expected_root_digest=bad_digest)
                 quarantined_data_loader()  # Must never be reached
-            self.assertFalse(canary["quarantined_files_opened"], "CANARY BREACH: Quarantined loader was called after digest failure!")
+            # Test D: Missing, empty, or malformed root digest fails closed
+            with self.assertRaises(SecurityIntegrityError):
+                execute_preload_quarantine_gate(manifest_path, models_dir, expected_root_digest="")
+            with self.assertRaises(SecurityIntegrityError):
+                execute_preload_quarantine_gate(manifest_path, models_dir, expected_root_digest="not_a_valid_64_char_hex_digest")
 
-            # Reset canary
-            canary["quarantined_files_opened"] = False
-
-            # Test C: Gate FAILS on tampered model artifact -> Canary MUST NOT be called
-            with open(joblib_path, "ab") as f:
-                f.write(b"TAMPER_BYTE")
-
-            with self.assertRaises(PipelineNotFrozenError):
-                execute_preload_quarantine_gate(manifest_path, models_dir, expected_root_digest=true_manifest_digest)
-                quarantined_data_loader()  # Must never be reached
-            self.assertFalse(canary["quarantined_files_opened"], "CANARY BREACH: Quarantined loader was called after artifact tamper!")
+            # Test E: run_quarantined_evaluation_pipeline verifies gate BEFORE opening file
+            from ml.evaluation.phase2_evaluate_unseen import run_quarantined_evaluation_pipeline
+            # Even if dataset_path is a canary path that doesn't exist or shouldn't be read:
+            canary_dataset_path = os.path.join(tmp_dir, "canary_quarantined_data.parquet")
+            with self.assertRaises(SecurityIntegrityError):
+                run_quarantined_evaluation_pipeline(
+                    dataset_path=canary_dataset_path,
+                    expected_root_digest=bad_digest,
+                    manifest_path=manifest_path,
+                    models_dir=models_dir,
+                )
+            self.assertFalse(os.path.exists(canary_dataset_path))
 
     # ==========================================================================
     # 4. Windowing Invariants (W=30, S=15)

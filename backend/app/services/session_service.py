@@ -178,7 +178,15 @@ class SessionService:
                 status="DISCARDED_UNKNOWN_SESSION",
             )
 
+        # ----------------------------------------------------------------------
+        # Strict Telemetry Privacy & Keystroke Validation Boundary
+        # Validates BEFORE in-memory buffer append or database persistence.
+        # ----------------------------------------------------------------------
+        from ml.data.privacy_validator import validate_event_privacy
         raw_events = [ev.model_dump() if hasattr(ev, "model_dump") else ev.dict() for ev in req.events]
+        for idx, ev_dict in enumerate(raw_events):
+            validate_event_privacy(ev_dict, event_index=idx)
+
         self._events_by_session[session_id].extend(raw_events)
 
         count = len(req.events)

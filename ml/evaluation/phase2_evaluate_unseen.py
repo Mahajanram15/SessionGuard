@@ -50,17 +50,26 @@ class SecurityIntegrityError(RuntimeError):
 def verify_external_root_digest(manifest_path: str, expected_root_digest: str) -> None:
     """
     Verifies the SHA-256 digest of the manifest against an independently supplied reference digest.
+    Fails closed if expected_root_digest is missing, empty, malformed, or mismatched.
     
     Raises:
         SecurityIntegrityError: If the manifest does not match the external root digest.
     """
+    if not expected_root_digest or not isinstance(expected_root_digest, str):
+        raise SecurityIntegrityError("External root digest is missing or empty! Pre-load quarantine gate fails closed.")
+
+    expected_clean = expected_root_digest.strip().lower()
+    if len(expected_clean) != 64 or not all(c in "0123456789abcdef" for c in expected_clean):
+        raise SecurityIntegrityError(
+            f"External root digest is malformed! Expected 64-char hex string, got: '{expected_root_digest}'"
+        )
+
     if not os.path.exists(manifest_path):
         raise SecurityIntegrityError(f"Freeze manifest not found at: {manifest_path}")
 
     with open(manifest_path, "rb") as f:
         actual_hash = hashlib.sha256(f.read()).hexdigest().lower()
 
-    expected_clean = expected_root_digest.strip().lower()
     if actual_hash != expected_clean:
         raise SecurityIntegrityError(
             f"ROOT MANIFEST INTEGRITY VIOLATION! Expected digest: '{expected_clean}', got live digest: '{actual_hash}'."
@@ -107,33 +116,35 @@ def verify_freeze_gate(manifest_path: str, models_dir: str) -> Dict[str, Any]:
 def execute_preload_quarantine_gate(
     manifest_path: str,
     models_dir: str,
-    expected_root_digest: Optional[str] = None,
+    expected_root_digest: str,
 ) -> Dict[str, Any]:
     """
     Enforces the complete pre-load quarantine evaluation gate:
-    1. Verifies independent root manifest digest (if supplied).
+    1. Verifies independent root manifest digest (MANDATORY; fails closed if missing/malformed).
     2. Verifies freeze manifest and model artifact checksums.
     Only returns when both gates succeed, guaranteeing zero access to quarantined files on failure.
     """
-    if expected_root_digest is not None:
-        verify_external_root_digest(manifest_path, expected_root_digest)
-
+    verify_external_root_digest(manifest_path, expected_root_digest)
     return verify_freeze_gate(manifest_path, models_dir)
 
 
 def evaluate_frozen_pipeline(
     X_test: pd.DataFrame,
     meta_test: pd.DataFrame,
+    expected_root_digest: str,
     manifest_path: str = "ml/evaluation/phase2_kinematics/pipeline_freeze_manifest.json",
     models_dir: str = "ml/evaluation/phase2_kinematics/frozen_models",
-    expected_root_digest: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Executes single-pass evaluation on out-of-domain data using strictly frozen model pipelines.
     Enforces pre-load quarantine verification before processing any test features.
     """
     # 1. Enforce pre-load quarantine gate verification
-    manifest = execute_preload_quarantine_gate(manifest_path, models_dir, expected_root_digest=expected_root_digest)
+    manifest = execute_preload_quarantine_gate(
+        manifest_path=manifest_path,
+        models_dir=models_dir,
+        expected_root_digest=expected_root_digest,
+    )
     threshold = float(manifest.get("decision_rule", {}).get("threshold", 0.50))
 
     # 2. Verify feature matrix format
@@ -202,3 +213,43 @@ def evaluate_frozen_pipeline(
         }
 
     return eval_results
+
+
+def run_quarantined_evaluation_pipeline(
+    dataset_path: str,
+    expected_root_digest: str,
+    manifest_path: str = "ml/evaluation/phase2_kinematics/pipeline_freeze_manifest.json",
+    models_dir: str = "ml/evaluation/phase2_kinematics/frozen_models",
+) -> Dict[str, Any]:
+    """
+    Evaluation Entry Point for Quarantined Datasets.
+    CRITICAL SECURITY INVARIANT:
+    execute_preload_quarantine_gate() runs BEFORE dataset_path is opened or loaded from disk.
+    If the digest is missing, empty, wrong, or an artifact hash fails, this function
+    terminates immediately and NEVER opens dataset_path.
+    """
+    # 1. Pre-load gate execution (runs BEFORE opening file)
+    manifest = execute_preload_quarantine_gate(
+        manifest_path=manifest_path,
+        models_dir=models_dir,
+        expected_root_digest=expected_root_digest,
+    )
+
+    # 2. Gate passed: NOW AND ONLY NOW open dataset from disk
+    if dataset_path.endswith(".parquet"):
+        data_df = pd.read_parquet(dataset_path)
+    else:
+        data_df = pd.read_csv(dataset_path)
+
+    X_test = data_df[SELECTED_FEATURES_PHASE2_KINEMATICS].copy()
+    meta_cols = [c for c in data_df.columns if c not in SELECTED_FEATURES_PHASE2_KINEMATICS]
+    meta_test = data_df[meta_cols].copy()
+
+    return evaluate_frozen_pipeline(
+        X_test=X_test,
+        meta_test=meta_test,
+        expected_root_digest=expected_root_digest,
+        manifest_path=manifest_path,
+        models_dir=models_dir,
+    )
+

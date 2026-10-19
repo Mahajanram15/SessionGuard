@@ -88,7 +88,14 @@ async def ingest_behavior_events(
     Ingests batched client behavioral dynamics (mouse, keystroke timing metadata, scrolling).
     PRIVACY COMPLIANCE: Zero raw keystroke characters or input values accepted.
     """
-    return await session_service.record_events(req, db=db)
+    from ml.data.privacy_validator import PrivacyViolationError
+    try:
+        return await session_service.record_events(req, db=db)
+    except PrivacyViolationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
 
 @router.post("/api-requests", response_model=ApiRequestResponse, status_code=status.HTTP_201_CREATED)
 async def log_api_request(
