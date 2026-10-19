@@ -193,6 +193,13 @@ function createSearchController(selectedTask, appClient, mockFetch, debounceDela
     await appClient.search(query, 5, mockFetch);
   }
 
+  async function onBlur() {
+    const query = textInput.trim();
+    if (selectedTask !== 'TASK_02' || !query || query.length < 2) return;
+    if (query === lastDebouncedQuery) return;
+    await handleSearchSubmit();
+  }
+
   function unmount() {
     if (searchDebounceTimer) {
       clearTimeout(searchDebounceTimer);
@@ -200,7 +207,7 @@ function createSearchController(selectedTask, appClient, mockFetch, debounceDela
     }
   }
 
-  return { onType, handleSearchSubmit, unmount };
+  return { onType, handleSearchSubmit, onBlur, unmount };
 }
 
 // ------------------------------------------------------------------------------
@@ -472,6 +479,132 @@ test('12. Intentional repeated Search button clicks dispatch every deliberate se
   // Click Search button a third time intentionally
   await controller.handleSearchSubmit();
   assert.equal(fetchCount, 3);
+
+  controller.unmount();
+});
+
+test('13. Mid-query typing pause does not fire an intermediate request and sends only the final query', async () => {
+  let activeSession = 'sess_search_midpause';
+  const client = createAppApiClient({ getSessionId: () => activeSession });
+  let fetchCount = 0;
+  let lastSearchedQuery = '';
+  const mockFetch = async (url) => {
+    fetchCount++;
+    lastSearchedQuery = new URL(url).searchParams.get('q');
+    return { ok: true, status: 200, data: { results: [] } };
+  };
+
+  // Controller with 400ms debounce delay
+  const controller = createSearchController('TASK_02', client, mockFetch, 400);
+
+  // 1. User types partial word 'wire' with short intervals
+  controller.onType('wi');
+  await new Promise((r) => setTimeout(r, 60));
+  controller.onType('wire');
+  assert.equal(fetchCount, 0);
+
+  // 2. User has a realistic pause in the middle of typing (250ms, within the 400ms debounce window)
+  await new Promise((r) => setTimeout(r, 250));
+
+  // Verify that NO intermediate request was fired for 'wire'
+  assert.equal(fetchCount, 0);
+
+  // 3. User resumes typing the remainder of the query: 'wireless headphones'
+  controller.onType('wireless');
+  await new Promise((r) => setTimeout(r, 60));
+  controller.onType('wireless head');
+  await new Promise((r) => setTimeout(r, 60));
+  controller.onType('wireless headphones');
+
+  // Verify still 0 requests while actively typing
+  assert.equal(fetchCount, 0);
+
+  // 4. User finishes typing and waits for the debounce window to complete (500ms > 400ms)
+  await new Promise((r) => setTimeout(r, 500));
+
+  // Exactly ONE request for the final query; intermediate 'wire' was NEVER sent
+  assert.equal(fetchCount, 1);
+  assert.equal(lastSearchedQuery, 'wireless headphones');
+
+  controller.unmount();
+});
+
+test('14. Mid-typing pause longer than 2 seconds followed by continued typing sends no intermediate request and sends final query once', async () => {
+  let activeSession = 'sess_search_long_pause';
+  const client = createAppApiClient({ getSessionId: () => activeSession });
+  let fetchCount = 0;
+  let lastSearchedQuery = '';
+  const mockFetch = async (url) => {
+    fetchCount++;
+    lastSearchedQuery = new URL(url).searchParams.get('q');
+    return { ok: true, status: 200, data: { results: [] } };
+  };
+
+  // Controller with 2500ms settling debounce delay (matching frontend SEARCH_DEBOUNCE_DELAY_MS)
+  const controller = createSearchController('TASK_02', client, mockFetch, 2500);
+
+  // 1. User types partial text 'wire'
+  controller.onType('wi');
+  await new Promise((r) => setTimeout(r, 50));
+  controller.onType('wire');
+  assert.equal(fetchCount, 0);
+
+  // 2. User pauses for longer than 2 seconds (2,100ms) mid-typing
+  await new Promise((r) => setTimeout(r, 2100));
+
+  // Verify that NO intermediate request was sent for 'wire' during this >2s pause
+  assert.equal(fetchCount, 0);
+
+  // 3. User resumes typing to the full query 'wireless headphones'
+  controller.onType('wireless');
+  await new Promise((r) => setTimeout(r, 50));
+  controller.onType('wireless head');
+  await new Promise((r) => setTimeout(r, 50));
+  controller.onType('wireless headphones');
+
+  // Verify still 0 requests while actively typing
+  assert.equal(fetchCount, 0);
+
+  // 4. Typing ends: user stops typing and the settling period completes (2,600ms > 2,500ms)
+  await new Promise((r) => setTimeout(r, 2600));
+
+  // Verify that exactly ONE request was dispatched for the final query
+  assert.equal(fetchCount, 1);
+  assert.equal(lastSearchedQuery, 'wireless headphones');
+
+  controller.unmount();
+});
+
+test('15. Finishing typing followed by input blur immediately dispatches the final query without waiting for debounce', async () => {
+  let activeSession = 'sess_search_blur';
+  const client = createAppApiClient({ getSessionId: () => activeSession });
+  let fetchCount = 0;
+  let lastSearchedQuery = '';
+  const mockFetch = async (url) => {
+    fetchCount++;
+    lastSearchedQuery = new URL(url).searchParams.get('q');
+    return { ok: true, status: 200, data: { results: [] } };
+  };
+
+  const controller = createSearchController('TASK_02', client, mockFetch, 2500);
+
+  // User types query
+  controller.onType('ergonomic split keyboard');
+  assert.equal(fetchCount, 0);
+
+  // User immediately moves to scroll/inspect (input blurs after 100ms)
+  await new Promise((r) => setTimeout(r, 100));
+  await controller.onBlur();
+
+  // Search dispatched immediately on blur
+  assert.equal(fetchCount, 1);
+  assert.equal(lastSearchedQuery, 'ergonomic split keyboard');
+
+  // Wait beyond the original 2500ms debounce
+  await new Promise((r) => setTimeout(r, 2600));
+
+  // Count remains exactly 1 (no delayed duplicate)
+  assert.equal(fetchCount, 1);
 
   controller.unmount();
 });
