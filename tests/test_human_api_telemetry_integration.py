@@ -14,6 +14,8 @@ Validates requirements 1 through 8:
 import os
 import json
 import unittest
+import tempfile
+import pandas as pd
 from fastapi.testclient import TestClient
 
 from backend.app.main import app
@@ -150,7 +152,7 @@ class TestHumanApiTelemetryIntegration(unittest.TestCase):
     # 3. Telemetry is not accepted / bound after session stop
     # --------------------------------------------------------------------------
     def test_telemetry_after_session_stop(self):
-        """Verify completing a session transitions its state and protects completed session record."""
+        """Verify completing a session transitions its state and rejects delayed telemetry."""
         session_id = self._start_human_session(task_id="TASK_01")
 
         # Record legitimate request while active
@@ -163,6 +165,7 @@ class TestHumanApiTelemetryIntegration(unittest.TestCase):
         })
         self.assertEqual(r1.status_code, 201)
         self.assertEqual(r1.json()["status"], "RECORDED")
+        self.assertEqual(r1.json()["sequence_number"], 1)
 
         # Stop session
         r_end = self.client.post("/api/session/end", json={
@@ -175,6 +178,24 @@ class TestHumanApiTelemetryIntegration(unittest.TestCase):
         self.assertEqual(r_end.status_code, 200)
         self.assertEqual(r_end.json()["status"], "COMPLETED")
         self.assertEqual(session_service._sessions[session_id]["status"], "COMPLETED")
+
+        # Attempt delayed telemetry after session completed
+        r_delayed = self.client.post("/api/api-requests", json={
+            "session_id": session_id,
+            "endpoint": "/api/products/details",
+            "http_method": "GET",
+            "status_code": 200,
+            "response_time_ms": 15.0
+        })
+        self.assertEqual(r_delayed.status_code, 201)
+        self.assertEqual(r_delayed.json()["status"], "DISCARDED_SESSION_COMPLETED")
+        self.assertEqual(r_delayed.json()["sequence_number"], 0)
+        self.assertEqual(r_delayed.json()["request_id"], 0)
+
+        # Verify record count and sequence numbers remain strictly unchanged
+        stored = session_service.get_session_api_requests(session_id)
+        self.assertEqual(len(stored), 1)
+        self.assertEqual(session_service.get_api_requests_count(session_id), 1)
 
     # --------------------------------------------------------------------------
     # 4. Sequence numbers remain monotonically increasing per session
@@ -355,6 +376,108 @@ class TestHumanApiTelemetryIntegration(unittest.TestCase):
         self.assertEqual(session_service._sessions[human_id]["label"], 0)
         self.assertEqual(session_service._sessions[auto_id]["collection_mode"], "AUTOMATED")
         self.assertEqual(session_service._sessions[auto_id]["label"], 1)
+
+    # --------------------------------------------------------------------------
+    # 9. Dataset export includes api_request_records.csv with complete schema
+    # --------------------------------------------------------------------------
+    def test_api_telemetry_dataset_export_with_records(self):
+        """Verify export_dataset writes api_request_records.csv with correct schema and contents."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            session_id = self._start_human_session(task_id="TASK_02", participant_id="p_export_01")
+
+            # Add synthetic behavioral event so session is valid for feature pipeline
+            session_service._events_by_session[session_id] = [
+                {
+                    "event_type": "mouse_move",
+                    "client_timestamp": 1690000000000,
+                    "event_data": {"x": 100, "y": 150, "distance_px": 10.0, "velocity_px_s": 250.0}
+                }
+            ]
+            session_service._events_count[session_id] = 1
+
+            # Ingest 2 API telemetry requests
+            r1 = self.client.post("/api/api-requests", json={
+                "session_id": session_id,
+                "endpoint": "/api/search",
+                "http_method": "GET",
+                "status_code": 200,
+                "response_time_ms": 32.5,
+                "param_keys": ["limit", "q"],
+                "client_timestamp": 1690000001000,
+            })
+            self.assertEqual(r1.status_code, 201)
+
+            r2 = self.client.post("/api/api-requests", json={
+                "session_id": session_id,
+                "endpoint": "/api/search/filter",
+                "http_method": "GET",
+                "status_code": 200,
+                "response_time_ms": 18.0,
+                "param_keys": ["filter", "sort"],
+                "client_timestamp": 1690000002000,
+            })
+            self.assertEqual(r2.status_code, 201)
+
+            # End session to mark as COMPLETED
+            self.client.post("/api/session/end", json={
+                "session_id": session_id,
+                "collection_mode": "HUMAN",
+                "task_id": "TASK_02",
+                "label": 0
+            })
+
+            # Run export into temporary directory (NEVER touches ml/data)
+            export_result = session_service.export_dataset(output_dir=temp_dir)
+            self.assertIn("paths", export_result)
+            paths = export_result["paths"]
+
+            # Verify all three CSV files were exported
+            self.assertIn("features_csv", paths)
+            self.assertIn("metadata_csv", paths)
+            self.assertIn("api_request_records_csv", paths)
+
+            api_csv_path = paths["api_request_records_csv"]
+            self.assertTrue(os.path.exists(api_csv_path))
+            self.assertTrue(os.path.exists(paths["features_csv"]))
+            self.assertTrue(os.path.exists(paths["metadata_csv"]))
+
+            # Validate api_request_records.csv contents and schema
+            df_api = pd.read_csv(api_csv_path)
+            expected_cols = [
+                "session_id", "task_id", "sequence_number", "http_method", "endpoint",
+                "status_code", "response_time_ms", "request_size_bytes", "response_size_bytes",
+                "param_keys", "payload_keys", "headers_fingerprint", "payload_structure_hash",
+                "client_timestamp", "server_timestamp"
+            ]
+            self.assertEqual(list(df_api.columns), expected_cols)
+
+            # Filter to our test session
+            df_sess = df_api[df_api["session_id"] == session_id]
+            self.assertEqual(len(df_sess), 2)
+            self.assertEqual(list(df_sess["sequence_number"]), [1, 2])
+            self.assertEqual(list(df_sess["endpoint"]), ["/api/search", "/api/search/filter"])
+            self.assertEqual(list(df_sess["task_id"]), ["TASK_02", "TASK_02"])
+
+    def test_api_telemetry_export_empty_records(self):
+        """Verify export_api_requests succeeds with zero records and writes header cleanly."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Create isolated session service instance with no records
+            from backend.app.services.session_service import SessionService
+            empty_service = SessionService()
+            empty_service._api_requests = {}
+            empty_service._sessions = {}
+
+            export_path = empty_service.export_api_requests(output_dir=temp_dir)
+            self.assertTrue(os.path.exists(export_path))
+
+            df_empty = pd.read_csv(export_path)
+            self.assertEqual(len(df_empty), 0)
+            self.assertEqual(list(df_empty.columns), [
+                "session_id", "task_id", "sequence_number", "http_method", "endpoint",
+                "status_code", "response_time_ms", "request_size_bytes", "response_size_bytes",
+                "param_keys", "payload_keys", "headers_fingerprint", "payload_structure_hash",
+                "client_timestamp", "server_timestamp"
+            ])
 
 
 if __name__ == "__main__":

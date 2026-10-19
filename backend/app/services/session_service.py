@@ -219,15 +219,24 @@ class SessionService:
         session_id = req.session_id
         now = datetime.utcnow()
 
-        if session_id not in self._sessions:
-            return ApiRequestResponse(
-                request_id=0,
-                session_id=session_id,
-                status="DISCARDED_UNKNOWN_SESSION",
-                sequence_number=0,
-            )
-
         with self._lock:
+            if session_id not in self._sessions:
+                return ApiRequestResponse(
+                    request_id=0,
+                    session_id=session_id,
+                    status="DISCARDED_UNKNOWN_SESSION",
+                    sequence_number=0,
+                )
+
+            session = self._sessions[session_id]
+            if session.get("status") != "ACTIVE":
+                return ApiRequestResponse(
+                    request_id=0,
+                    session_id=session_id,
+                    status="DISCARDED_SESSION_COMPLETED",
+                    sequence_number=0,
+                )
+
             self._global_request_id += 1
             request_id = self._global_request_id
             current_seq = self._api_requests_count.get(session_id, 0) + 1
@@ -428,9 +437,86 @@ class SessionService:
             "is_balanced": abs(human_count - auto_count) <= max(2, int(0.2 * max(human_count, auto_count, 1)))
         }
 
+    def export_api_requests(self, output_dir: str = "ml/data") -> str:
+        """
+        Exports in-memory collected API telemetry records to output_dir/api_request_records.csv.
+        """
+        import pandas as pd
+        os.makedirs(output_dir, exist_ok=True)
+        export_path = os.path.join(output_dir, "api_request_records.csv")
+
+        columns = [
+            "session_id",
+            "task_id",
+            "sequence_number",
+            "http_method",
+            "endpoint",
+            "status_code",
+            "response_time_ms",
+            "request_size_bytes",
+            "response_size_bytes",
+            "param_keys",
+            "payload_keys",
+            "headers_fingerprint",
+            "payload_structure_hash",
+            "client_timestamp",
+            "server_timestamp",
+        ]
+
+        rows = []
+        with self._lock:
+            for s_id, reqs in self._api_requests.items():
+                session_meta = self._sessions.get(s_id, {})
+                task_id = session_meta.get("task_id", "")
+                for r in reqs:
+                    param_keys_val = r.get("param_keys")
+                    if isinstance(param_keys_val, (list, tuple, dict)):
+                        param_keys_val = json.dumps(param_keys_val)
+                    elif param_keys_val is not None:
+                        param_keys_val = str(param_keys_val)
+                    else:
+                        param_keys_val = "[]"
+
+                    payload_keys_val = r.get("payload_keys")
+                    if isinstance(payload_keys_val, (list, tuple, dict)):
+                        payload_keys_val = json.dumps(payload_keys_val)
+                    elif payload_keys_val is not None:
+                        payload_keys_val = str(payload_keys_val)
+                    else:
+                        payload_keys_val = "[]"
+
+                    row = {
+                        "session_id": s_id,
+                        "task_id": task_id,
+                        "sequence_number": r.get("sequence_number", 0),
+                        "http_method": r.get("http_method", ""),
+                        "endpoint": r.get("endpoint", ""),
+                        "status_code": r.get("status_code", 0),
+                        "response_time_ms": float(r.get("response_time_ms", 0.0)),
+                        "request_size_bytes": int(r.get("request_size_bytes", 0) or 0),
+                        "response_size_bytes": int(r.get("response_size_bytes", 0) or 0),
+                        "param_keys": param_keys_val,
+                        "payload_keys": payload_keys_val,
+                        "headers_fingerprint": r.get("headers_fingerprint") or "",
+                        "payload_structure_hash": r.get("payload_structure_hash") or "",
+                        "client_timestamp": int(r.get("client_timestamp", 0) or 0),
+                        "server_timestamp": int(r.get("server_timestamp", 0) or 0),
+                    }
+                    rows.append(row)
+
+        if rows:
+            rows.sort(key=lambda x: (x["session_id"], x["sequence_number"]))
+            df = pd.DataFrame(rows, columns=columns)
+        else:
+            df = pd.DataFrame(columns=columns)
+
+        df.to_csv(export_path, index=False)
+        return export_path
+
     def export_dataset(self, output_dir: str = "ml/data") -> Dict[str, Any]:
         """
-        Exports in-memory collected sessions to ml/data/features.csv and ml/data/metadata.csv.
+        Exports in-memory collected sessions to ml/data/features.csv, ml/data/metadata.csv,
+        and ml/data/api_request_records.csv.
         """
         from ml.features.pipeline import DatasetPipeline
         pipeline = DatasetPipeline()
@@ -451,10 +537,15 @@ class SessionService:
 
         features_df, metadata_df, report = pipeline.process_sessions(sessions_events, metadata)
         paths = pipeline.export_dataset(features_df, metadata_df, output_dir=output_dir)
+
+        api_records_path = self.export_api_requests(output_dir=output_dir)
+        paths["api_request_records_csv"] = api_records_path
+
         return {
             "paths": paths,
             "report": report,
-            "usable_sessions": len(features_df)
+            "usable_sessions": len(features_df),
+            "total_api_requests_exported": self.get_api_requests_count(),
         }
 
 session_service = SessionService()
