@@ -42,6 +42,31 @@ class PipelineNotFrozenError(RuntimeError):
     pass
 
 
+class SecurityIntegrityError(RuntimeError):
+    """Raised when the independently supplied root manifest digest does not match the manifest on disk."""
+    pass
+
+
+def verify_external_root_digest(manifest_path: str, expected_root_digest: str) -> None:
+    """
+    Verifies the SHA-256 digest of the manifest against an independently supplied reference digest.
+    
+    Raises:
+        SecurityIntegrityError: If the manifest does not match the external root digest.
+    """
+    if not os.path.exists(manifest_path):
+        raise SecurityIntegrityError(f"Freeze manifest not found at: {manifest_path}")
+
+    with open(manifest_path, "rb") as f:
+        actual_hash = hashlib.sha256(f.read()).hexdigest().lower()
+
+    expected_clean = expected_root_digest.strip().lower()
+    if actual_hash != expected_clean:
+        raise SecurityIntegrityError(
+            f"ROOT MANIFEST INTEGRITY VIOLATION! Expected digest: '{expected_clean}', got live digest: '{actual_hash}'."
+        )
+
+
 def verify_freeze_gate(manifest_path: str, models_dir: str) -> Dict[str, Any]:
     """
     Verifies that the development pipeline has been frozen and that model artifacts
@@ -79,17 +104,36 @@ def verify_freeze_gate(manifest_path: str, models_dir: str) -> Dict[str, Any]:
     return manifest
 
 
+def execute_preload_quarantine_gate(
+    manifest_path: str,
+    models_dir: str,
+    expected_root_digest: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Enforces the complete pre-load quarantine evaluation gate:
+    1. Verifies independent root manifest digest (if supplied).
+    2. Verifies freeze manifest and model artifact checksums.
+    Only returns when both gates succeed, guaranteeing zero access to quarantined files on failure.
+    """
+    if expected_root_digest is not None:
+        verify_external_root_digest(manifest_path, expected_root_digest)
+
+    return verify_freeze_gate(manifest_path, models_dir)
+
+
 def evaluate_frozen_pipeline(
     X_test: pd.DataFrame,
     meta_test: pd.DataFrame,
     manifest_path: str = "ml/evaluation/phase2_kinematics/pipeline_freeze_manifest.json",
     models_dir: str = "ml/evaluation/phase2_kinematics/frozen_models",
+    expected_root_digest: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Executes single-pass evaluation on out-of-domain data using strictly frozen model pipelines.
+    Enforces pre-load quarantine verification before processing any test features.
     """
-    # 1. Enforce freeze gate verification
-    manifest = verify_freeze_gate(manifest_path, models_dir)
+    # 1. Enforce pre-load quarantine gate verification
+    manifest = execute_preload_quarantine_gate(manifest_path, models_dir, expected_root_digest=expected_root_digest)
     threshold = float(manifest.get("decision_rule", {}).get("threshold", 0.50))
 
     # 2. Verify feature matrix format
