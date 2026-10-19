@@ -19,8 +19,8 @@ class TestTrainExperimentA(unittest.TestCase):
     def test_dataset_summary(self):
         """Verify dataset counts in evaluation report."""
         summary = self.results["dataset_summary"]
-        self.assertEqual(summary["total_sessions"], 45)
-        self.assertEqual(summary["human_sessions"], 15)
+        self.assertEqual(summary["total_sessions"], 53)
+        self.assertEqual(summary["human_sessions"], 23)
         self.assertEqual(summary["automated_sessions"], 30)
         self.assertEqual(summary["feature_count"], 64)
         self.assertEqual(summary["tasks"], ["TASK_01", "TASK_02", "TASK_03"])

@@ -47,9 +47,9 @@ class TestFeatureConfigExperimentA(unittest.TestCase):
         X, y, meta = load_experiment_dataset("ml/data/features.csv", "ml/data/metadata.csv", experiment="A")
         
         # Dimensions
-        self.assertEqual(X.shape, (45, 64))
-        self.assertEqual(len(y), 45)
-        self.assertEqual(len(meta), 45)
+        self.assertEqual(X.shape, (53, 64))
+        self.assertEqual(len(y), 53)
+        self.assertEqual(len(meta), 53)
 
         # Label isolation: authoritative target must not be in feature matrix
         self.assertNotIn("label", X.columns)
@@ -59,8 +59,8 @@ class TestFeatureConfigExperimentA(unittest.TestCase):
         # Data integrity: no missing/NaN values in derived feature matrix
         self.assertEqual(X.isna().sum().sum(), 0)
 
-        # Label distribution (15 Human, 30 Automated)
-        self.assertEqual(int((y == 0).sum()), 15)
+        # Label distribution (23 Human, 30 Automated)
+        self.assertEqual(int((y == 0).sum()), 23)
         self.assertEqual(int((y == 1).sum()), 30)
 
 

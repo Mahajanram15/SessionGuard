@@ -146,11 +146,24 @@ async def get_dataset_summary():
     return session_service.get_dataset_summary()
 
 @router.post("/dataset/export", status_code=status.HTTP_200_OK)
-async def export_dataset():
+async def export_dataset(
+    target_partition: Optional[str] = Query(None, description="Target partition: 'phase2_development' or 'phase1'")
+):
     """
-    Triggers export of recorded sessions into ml/data/features.csv and ml/data/metadata.csv.
+    Triggers export of recorded sessions.
+    When target_partition is 'phase2_development', exports strictly to ml/data/phase2_development/.
+    Defaults to Phase 1 path ('ml/data') for backward compatibility.
     """
+    if target_partition == "phase2_development":
+        return session_service.export_phase2_development_dataset()
     return session_service.export_dataset()
+
+@router.post("/dataset/export/phase2", status_code=status.HTTP_200_OK)
+async def export_phase2_dataset():
+    """
+    Dedicated endpoint: triggers export of Phase 2 development sessions exclusively into ml/data/phase2_development/.
+    """
+    return session_service.export_phase2_development_dataset()
 
 # ------------------------------------------------------------------------------
 # 6. Mock Application Domain Endpoints (Controlled Research Experiments)

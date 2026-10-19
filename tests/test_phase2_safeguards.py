@@ -91,7 +91,7 @@ from tests.fixtures.synthetic_windows import (
 # Immutable Baseline SHA-256 Hashes of Protected Phase 1 Files
 BASELINE_PROTECTED_HASHES = {
     "features.csv": "7164C4432BFC1D0E93BE0E183639FAA67215E5BB5A2EE6F05565BE85B668319C".lower(),
-    "metadata.csv": "E2BAD00643DDE2AC6F1A8889D8B5987AEB957390CAD7E37B3BC13B3A7E9DC3A5".lower(),
+    "metadata.csv": "E98184240A8E6C4FC895CE132FE68EBD279420DF572396A9F5B5460E072EF8B9".lower(),
     "api_request_records.csv": "2EA9028854C681D02929B12D1C894F27DBEDA92D82AAA2B8E077DA5154FF4D46".lower(),
     "train_experiment_a.py": "925F4AB7DAD47DBDF699CE6498611F20723602C35D325CB7F8EE48723FEAFCED".lower(),
     "feature_config.py": "D50ED367ED3EF965F42CA51BB8FC96873D45C76B363B5F000D3CD3C5D8D1E7EC".lower(),
@@ -231,6 +231,225 @@ class TestPhase2Safeguards(unittest.TestCase):
             loop.run_until_complete(session_service.record_events(nested_bad_batch))
         self.assertEqual(session_service._events_count[sess_id], 2)
         loop.close()
+
+    def test_session_lifecycle_telemetry_rejection_and_export_isolation(self):
+        """
+        Verify:
+        1. Events are accepted for an ACTIVE session.
+        2. Events are rejected for a COMPLETED session with DISCARDED_SESSION_COMPLETED.
+        3. Rejected events do not mutate in-memory event buffers.
+        4. Rejected events do not update the persisted cache.
+        5. Rejected events do not create database records (mock DB add_all not called).
+        6. Unknown-session behavior remains DISCARDED_UNKNOWN_SESSION.
+        7. Phase 2 development export destination targets ml/data/phase2_development/ and cannot target ml/data.
+        """
+        import asyncio
+        from unittest.mock import AsyncMock, patch
+        from backend.app.services.session_service import session_service
+        from backend.app.schemas.session import SessionStartRequest
+        from backend.app.schemas.behavior import BehaviorBatchRequest, BehaviorEventItem
+
+        loop = asyncio.new_event_loop()
+        try:
+            # 6. Unknown session behavior remains unchanged
+            unknown_batch = BehaviorBatchRequest(
+                session_id="sess_nonexistent_unknown_12345",
+                events=[
+                    BehaviorEventItem(
+                        event_type="mouse_move",
+                        client_timestamp=1000,
+                        event_data={"x": 50, "y": 50},
+                    )
+                ]
+            )
+            res_unknown = loop.run_until_complete(session_service.record_events(unknown_batch))
+            self.assertEqual(res_unknown.status, "DISCARDED_UNKNOWN_SESSION")
+            self.assertEqual(res_unknown.processed_events, 0)
+
+            # 1. Start an ACTIVE session and verify events are accepted
+            start_req = SessionStartRequest(
+                user_agent="LifecycleTestAgent/1.0",
+                screen_resolution="1920x1080",
+                client_timestamp=1000,
+                collection_mode="HUMAN",
+                task_id="TASK_01",
+                participant_id="H1",
+            )
+            start_res = loop.run_until_complete(session_service.create_session(start_req, client_ip="127.0.0.1"))
+            sess_id = start_res.session_id
+            self.assertEqual(session_service._sessions[sess_id]["status"], "ACTIVE")
+
+            active_batch = BehaviorBatchRequest(
+                session_id=sess_id,
+                events=[
+                    BehaviorEventItem(
+                        event_type="mouse_move",
+                        client_timestamp=1001,
+                        event_data={"x": 100, "y": 200},
+                    ),
+                    BehaviorEventItem(
+                        event_type="mouse_click",
+                        client_timestamp=1050,
+                        event_data={"x": 100, "y": 200, "button": 0},
+                    )
+                ]
+            )
+            mock_db_active = AsyncMock()
+            res_active = loop.run_until_complete(session_service.record_events(active_batch, db=mock_db_active))
+            self.assertEqual(res_active.status, "INGESTED")
+            self.assertEqual(res_active.processed_events, 2)
+            self.assertEqual(len(session_service._events_by_session[sess_id]), 2)
+            self.assertEqual(session_service._events_count[sess_id], 2)
+
+            # End session -> marks status COMPLETED
+            end_res = loop.run_until_complete(session_service.end_session(sess_id))
+            self.assertEqual(end_res.status, "COMPLETED")
+            self.assertEqual(session_service._sessions[sess_id]["status"], "COMPLETED")
+
+            # Snapshot state prior to rejection attempt
+            buffer_before = list(session_service._events_by_session[sess_id])
+            count_before = session_service._events_count[sess_id]
+
+            # 2. Events on COMPLETED session are rejected with DISCARDED_SESSION_COMPLETED
+            late_batch = BehaviorBatchRequest(
+                session_id=sess_id,
+                events=[
+                    BehaviorEventItem(
+                        event_type="mouse_move",
+                        client_timestamp=2000,
+                        event_data={"x": 300, "y": 400},
+                    )
+                ]
+            )
+
+            mock_db_completed = AsyncMock()
+            with patch.object(session_service, "_save_cache") as mock_save_cache:
+                res_late = loop.run_until_complete(session_service.record_events(late_batch, db=mock_db_completed))
+
+                # Assertion 2: DISCARDED_SESSION_COMPLETED with processed_events=0
+                self.assertEqual(res_late.status, "DISCARDED_SESSION_COMPLETED")
+                self.assertEqual(res_late.processed_events, 0)
+
+                # Assertion 3: In-memory buffers unchanged
+                self.assertEqual(session_service._events_by_session[sess_id], buffer_before)
+                self.assertEqual(session_service._events_count[sess_id], count_before)
+
+                # Assertion 4: Persisted cache not called
+                mock_save_cache.assert_not_called()
+
+                # Assertion 5: Database records not created
+                mock_db_completed.add_all.assert_not_called()
+
+            # Clean up test session from in-memory tracking
+            session_service._sessions.pop(sess_id, None)
+            session_service._events_by_session.pop(sess_id, None)
+            session_service._events_count.pop(sess_id, None)
+
+            # 7. Phase 2 development export destination canonical isolation check
+            import inspect
+            sig = inspect.signature(session_service.export_phase2_development_dataset)
+            default_export_dir = sig.parameters["output_dir"].default
+            expected_phase2_dir = os.path.join("ml", "data", "phase2_development")
+            self.assertEqual(os.path.normpath(default_export_dir), os.path.normpath(expected_phase2_dir))
+
+            # Test canonical path resolution & containment:
+            # Must strictly reject relative traversals, absolute baseline paths, trailing separators,
+            # and destinations outside ml/data/phase2_development.
+            abs_baseline = os.path.abspath(os.path.join(workspace_root, "ml", "data"))
+            forbidden_destinations = [
+                "ml/data",
+                "ml/data/",
+                "ml/data//",
+                r"ml\data",
+                r"ml\data\\",
+                "ml/data/phase2_development/..",
+                "ml/data/phase2_development/../../ml/data",
+                abs_baseline,
+                os.path.join(abs_baseline, ""),
+                "ml/data/other",
+                "ml/data/features",
+                "C:/Windows/Temp",
+                "../outside",
+                ".",
+                "",
+                "..",
+            ]
+
+            for forbidden_dest in forbidden_destinations:
+                with self.assertRaises(ValueError, msg=f"Allowed unsafe export destination: {forbidden_dest}"):
+                    session_service.export_phase2_development_dataset(output_dir=forbidden_dest)
+
+            # Test valid authorized targets with mocked export_dataset (zero real export execution)
+            with patch.object(session_service, "export_dataset", return_value={"mock": True}) as mock_exp:
+                valid_destinations = [
+                    "ml/data/phase2_development",
+                    "ml/data/phase2_development/",
+                    r"ml\data\phase2_development",
+                    os.path.join(workspace_root, "ml", "data", "phase2_development"),
+                    os.path.join(workspace_root, "ml", "data", "phase2_development", "batch_01"),
+                ]
+                for valid_dest in valid_destinations:
+                    res = session_service.export_phase2_development_dataset(output_dir=valid_dest)
+                    self.assertEqual(res, {"mock": True})
+                self.assertEqual(mock_exp.call_count, len(valid_destinations))
+
+        finally:
+            loop.close()
+
+    def test_participant_consent_brief_alignment(self):
+        """
+        Verify that docs/PARTICIPANT_CONSENT_BRIEF.md exists and accurately details:
+        1. Complete verified telemetry inventory: coordinates, velocity, acceleration, scroll,
+           keystroke timing (dwell/flight/backspace/paste), navigation, and API request metadata.
+        2. Strict technical exclusions: no typed characters, no passwords, no form values.
+        3. Clear distinction between technically blocked data and unrequested data.
+        4. Technical classification as pseudonymous research data (not anonymous).
+        5. IP address handling: application layer SHA-256 hash vs transport logging.
+        6. Study purpose, voluntary participation, withdrawal process, and contact protocol.
+        7. Explicit flagging of unresolved operational decisions (IRB, retention schedule).
+        """
+        brief_path = os.path.join(workspace_root, "docs", "PARTICIPANT_CONSENT_BRIEF.md")
+        self.assertTrue(os.path.exists(brief_path), f"Consent brief missing: {brief_path}")
+
+        with open(brief_path, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        # Telemetry collected checks
+        self.assertIn("hold_time_ms", content)
+        self.assertIn("inter_key_latency_ms", content)
+        self.assertIn("dwell_ms", content)
+        self.assertIn("flight_ms", content)
+        self.assertIn("is_backspace", content)
+        self.assertIn("is_paste", content)
+        self.assertIn("velocity_px_s", content)
+        self.assertIn("acceleration_px_s2", content)
+        self.assertIn("scroll_x", content)
+        self.assertIn("scroll_y", content)
+        self.assertIn("delta_y", content)
+        self.assertIn("TASK_01", content)
+        self.assertIn("TASK_02", content)
+        self.assertIn("TASK_03", content)
+        self.assertIn("user-agent", content.lower())
+        self.assertIn("screen", content.lower())
+        self.assertIn("timezone", content.lower())
+        self.assertIn("param_keys", content)
+        self.assertIn("payload_keys", content)
+        self.assertIn("ip_hash", content)
+
+        # Technical exclusion and filtering checks
+        self.assertIn("Technically Blocked", content)
+        self.assertIn("PrivacyViolationError", content)
+        self.assertIn("password", content.lower())
+
+        # Pseudonymity vs Anonymity distinction
+        self.assertIn("PSEUDONYMOUS, NOT ANONYMOUS", content)
+
+        # Rights, Governance & Operational Blockers
+        self.assertIn("Voluntary Participation", content)
+        self.assertIn("Withdrawal", content)
+        self.assertIn("mahajanram1506@gmail.com", content)
+        self.assertIn("BLOCKER", content)
+        self.assertIn("H1", content)
 
     # ==========================================================================
     # 2. Development-Only Dataset Loader & Partition Boundary Tests

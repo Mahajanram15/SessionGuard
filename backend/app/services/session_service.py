@@ -178,6 +178,14 @@ class SessionService:
                 status="DISCARDED_UNKNOWN_SESSION",
             )
 
+        session = self._sessions[session_id]
+        if session.get("status") != "ACTIVE":
+            return BehaviorBatchResponse(
+                session_id=session_id,
+                processed_events=0,
+                status="DISCARDED_SESSION_COMPLETED",
+            )
+
         # ----------------------------------------------------------------------
         # Strict Telemetry Privacy & Keystroke Validation Boundary
         # Validates BEFORE in-memory buffer append or database persistence.
@@ -555,5 +563,43 @@ class SessionService:
             "usable_sessions": len(features_df),
             "total_api_requests_exported": self.get_api_requests_count(),
         }
+
+    def export_phase2_development_dataset(
+        self,
+        output_dir: str = os.path.join("ml", "data", "phase2_development")
+    ) -> Dict[str, Any]:
+        """
+        Exports Phase 2 development sessions exclusively into ml/data/phase2_development/,
+        guaranteeing strict isolation from the Phase 1 protected baseline datasets in ml/data/.
+        Uses canonical path resolution to strictly reject relative traversals, symlinks,
+        or any target outside the authorized Phase 2 development directory.
+        """
+        root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+        authorized_dir = os.path.realpath(os.path.abspath(os.path.join(root_dir, "ml", "data", "phase2_development")))
+        protected_baseline_dir = os.path.realpath(os.path.abspath(os.path.join(root_dir, "ml", "data")))
+
+        # Canonical path resolution
+        target = output_dir if os.path.isabs(output_dir) else os.path.join(root_dir, output_dir)
+        resolved_dir = os.path.realpath(os.path.abspath(target))
+
+        # 1. Reject any path that resolves directly to the protected baseline directory
+        if os.path.normcase(resolved_dir) == os.path.normcase(protected_baseline_dir):
+            raise ValueError(
+                f"Security violation: Phase 2 development export resolves to protected baseline directory '{resolved_dir}'!"
+            )
+
+        # 2. Reject any path outside the authorized Phase 2 development directory
+        try:
+            common = os.path.commonpath([resolved_dir, authorized_dir])
+            if os.path.normcase(common) != os.path.normcase(authorized_dir):
+                raise ValueError(
+                    f"Security violation: Phase 2 development export must be contained strictly within '{authorized_dir}', got '{resolved_dir}'!"
+                )
+        except ValueError as e:
+            raise ValueError(
+                f"Security violation: Invalid path or path outside authorized directory: {e}"
+            )
+
+        return self.export_dataset(output_dir=resolved_dir)
 
 session_service = SessionService()
