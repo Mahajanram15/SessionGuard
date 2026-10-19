@@ -91,75 +91,9 @@ export const TelemetryDemoPage: React.FC<TelemetryDemoPageProps> = ({
     });
   }, [sdk]);
 
-  // Search debounce timer and last debounced query refs (Experiment B regression prevention)
-  const SEARCH_DEBOUNCE_DELAY_MS = 2500;
-  const searchDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastDebouncedQueryRef = useRef<string>('');
-
-  // TASK_02: Debounced search triggering when typing query in sandbox (2500ms delay)
-  useEffect(() => {
-    if (searchDebounceTimerRef.current) {
-      clearTimeout(searchDebounceTimerRef.current);
-      searchDebounceTimerRef.current = null;
-    }
-
-    if (selectedTask !== 'TASK_02') {
-      lastDebouncedQueryRef.current = '';
-      return;
-    }
-
-    const query = demoTextInput.trim();
-    if (!query || query.length < 2) {
-      lastDebouncedQueryRef.current = '';
-      return;
-    }
-
-    // Prevent duplicate automated search if the query text hasn't changed since last debounced dispatch
-    if (query === lastDebouncedQueryRef.current) {
-      return;
-    }
-
-    searchDebounceTimerRef.current = setTimeout(async () => {
-      lastDebouncedQueryRef.current = query;
-      const res = await appClient.search(query, 5);
-      if (res.error) {
-        setApiError(res.error.message);
-      } else {
-        setApiError(null);
-      }
-      searchDebounceTimerRef.current = null;
-    }, SEARCH_DEBOUNCE_DELAY_MS);
-
-    return () => {
-      if (searchDebounceTimerRef.current) {
-        clearTimeout(searchDebounceTimerRef.current);
-        searchDebounceTimerRef.current = null;
-      }
-    };
-  }, [demoTextInput, selectedTask, appClient]);
-
-  // Clean up any pending search debounce timer on unmount
-  useEffect(() => {
-    return () => {
-      if (searchDebounceTimerRef.current) {
-        clearTimeout(searchDebounceTimerRef.current);
-        searchDebounceTimerRef.current = null;
-      }
-    };
-  }, []);
-
   const handleSearchSubmit = async () => {
     const query = demoTextInput.trim();
     if (!query) return;
-
-    // Clear any pending debounced timer before executing deliberate search
-    if (searchDebounceTimerRef.current) {
-      clearTimeout(searchDebounceTimerRef.current);
-      searchDebounceTimerRef.current = null;
-    }
-
-    // Mark query as debounced so an upcoming debounce won't duplicate this deliberate search
-    lastDebouncedQueryRef.current = query;
 
     try {
       const res = await appClient.search(query, 5);
@@ -173,23 +107,11 @@ export const TelemetryDemoPage: React.FC<TelemetryDemoPageProps> = ({
     }
   };
 
-  const handleSearchBlur = () => {
-    const query = demoTextInput.trim();
-    if (selectedTask !== 'TASK_02' || !query || query.length < 2) return;
-    if (query === lastDebouncedQueryRef.current) return;
-    handleSearchSubmit();
-  };
-
   const handleStart = async () => {
     setLoading(true);
     setExportNotice(null);
     setClickCount(0);
     setDemoTextInput('');
-    lastDebouncedQueryRef.current = '';
-    if (searchDebounceTimerRef.current) {
-      clearTimeout(searchDebounceTimerRef.current);
-      searchDebounceTimerRef.current = null;
-    }
     setLastClickedCategory('None');
     setLastApiTelemetry(null);
     setApiActivityLog([]);
@@ -211,11 +133,6 @@ export const TelemetryDemoPage: React.FC<TelemetryDemoPageProps> = ({
   };
 
   const handleStop = async () => {
-    if (searchDebounceTimerRef.current) {
-      clearTimeout(searchDebounceTimerRef.current);
-      searchDebounceTimerRef.current = null;
-    }
-    lastDebouncedQueryRef.current = '';
     setLoading(true);
     try {
       await sdk.stop(`${collectionMode}_${selectedTask}_COMPLETED`);
@@ -672,13 +589,12 @@ export const TelemetryDemoPage: React.FC<TelemetryDemoPageProps> = ({
                 onChange={(e) => {
                   setDemoTextInput(e.target.value);
                 }}
-                onBlur={handleSearchBlur}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     handleSearchSubmit();
                   }
                 }}
-                placeholder="Type query (e.g. 'laptop'). Auto-searches or press Enter..."
+                placeholder="Type query and press Enter or click Search..."
                 className="flex-1 px-3.5 py-2 rounded-lg bg-surface-elevated border border-border text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-primary-500 font-sans"
               />
               <button

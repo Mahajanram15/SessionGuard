@@ -152,59 +152,27 @@ async function simulateNavigation(route, selectedTask, appClient, mockFetch) {
 // ------------------------------------------------------------------------------
 // Simulated Search Controller matching frontend/src/pages/TelemetryDemoPage.tsx
 // ------------------------------------------------------------------------------
-function createSearchController(selectedTask, appClient, mockFetch, debounceDelayMs = 300) {
-  let searchDebounceTimer = null;
+function createSearchController(selectedTask, appClient, mockFetch) {
   let textInput = '';
-  let lastDebouncedQuery = '';
 
   function onType(newText) {
     textInput = newText;
-    if (searchDebounceTimer) {
-      clearTimeout(searchDebounceTimer);
-      searchDebounceTimer = null;
-    }
-    if (selectedTask !== 'TASK_02') {
-      lastDebouncedQuery = '';
-      return;
-    }
-    const query = newText.trim();
-    if (!query || query.length < 2) {
-      lastDebouncedQuery = '';
-      return;
-    }
-    if (query === lastDebouncedQuery) {
-      return;
-    }
-    searchDebounceTimer = setTimeout(async () => {
-      lastDebouncedQuery = query;
-      await appClient.search(query, 5, mockFetch);
-      searchDebounceTimer = null;
-    }, debounceDelayMs);
+    // No auto-dispatch. Typing alone never sends a request.
   }
 
   async function handleSearchSubmit() {
     const query = textInput.trim();
     if (!query) return;
-    if (searchDebounceTimer) {
-      clearTimeout(searchDebounceTimer);
-      searchDebounceTimer = null;
-    }
-    lastDebouncedQuery = query;
     await appClient.search(query, 5, mockFetch);
   }
 
   async function onBlur() {
-    const query = textInput.trim();
-    if (selectedTask !== 'TASK_02' || !query || query.length < 2) return;
-    if (query === lastDebouncedQuery) return;
-    await handleSearchSubmit();
+    // Blur NEVER triggers a search request under any circumstances.
+    // In accordance with specifications, searches fire only on Enter or Search button click.
   }
 
   function unmount() {
-    if (searchDebounceTimer) {
-      clearTimeout(searchDebounceTimer);
-      searchDebounceTimer = null;
-    }
+    // No timers to clean up
   }
 
   return { onType, handleSearchSubmit, onBlur, unmount };
@@ -269,19 +237,19 @@ test('3. Search typing followed by Enter produces exactly one request', async ()
     return { ok: true, status: 200, data: { results: [] } };
   };
 
-  const controller = createSearchController('TASK_02', client, mockFetch, 200);
+  const controller = createSearchController('TASK_02', client, mockFetch);
 
   // User types query
   controller.onType('ultrabook');
   assert.equal(fetchCount, 0);
 
-  // User hits Enter after 50ms (before the 200ms debounce expires)
+  // User hits Enter after 50ms
   await new Promise((r) => setTimeout(r, 50));
   await controller.handleSearchSubmit();
   assert.equal(fetchCount, 1);
   assert.equal(client.emittedRecords.length, 1);
 
-  // Wait beyond original debounce delay
+  // Wait to verify no delayed duplicate
   await new Promise((r) => setTimeout(r, 300));
 
   // Verify no duplicate second request was fired
@@ -300,7 +268,7 @@ test('4. Search typing followed by clicking Search produces exactly one request'
     return { ok: true, status: 200, data: { results: [] } };
   };
 
-  const controller = createSearchController('TASK_02', client, mockFetch, 200);
+  const controller = createSearchController('TASK_02', client, mockFetch);
 
   // User types query
   controller.onType('mechanical keyboard');
@@ -312,7 +280,7 @@ test('4. Search typing followed by clicking Search produces exactly one request'
   assert.equal(fetchCount, 1);
   assert.equal(client.emittedRecords.length, 1);
 
-  // Wait beyond original debounce delay
+  // Wait to verify no delayed duplicate
   await new Promise((r) => setTimeout(r, 300));
 
   // Verify no duplicate second request was fired
@@ -322,32 +290,42 @@ test('4. Search typing followed by clicking Search produces exactly one request'
   controller.unmount();
 });
 
-test('5. Debounced search still works when the user does not submit immediately', async () => {
-  let activeSession = 'sess_search_debounce';
+test('5. Typing without explicit submission produces zero requests; blur produces zero; Enter dispatches', async () => {
+  let activeSession = 'sess_search_blur_dispatch';
   const client = createAppApiClient({ getSessionId: () => activeSession });
   let fetchCount = 0;
-  const mockFetch = async () => {
+  let lastSearchedQuery = '';
+  const mockFetch = async (url) => {
     fetchCount++;
+    lastSearchedQuery = new URL(url).searchParams.get('q');
     return { ok: true, status: 200, data: { results: [] } };
   };
 
-  const controller = createSearchController('TASK_02', client, mockFetch, 200);
+  const controller = createSearchController('TASK_02', client, mockFetch);
 
-  // User types query and waits
+  // User types query and waits — no auto-dispatch
   controller.onType('monitor 4k');
   assert.equal(fetchCount, 0);
 
-  // Wait 300ms for debounce timer to fire naturally
-  await new Promise((r) => setTimeout(r, 300));
+  // Wait any amount of time — still zero requests
+  await new Promise((r) => setTimeout(r, 500));
+  assert.equal(fetchCount, 0);
 
+  // User blurs input (leaves the field or clicks DevTools) — MUST produce zero requests
+  await controller.onBlur();
+  assert.equal(fetchCount, 0);
+
+  // User explicitly presses Enter
+  await controller.handleSearchSubmit();
   assert.equal(fetchCount, 1);
   assert.equal(client.emittedRecords.length, 1);
   assert.equal(client.emittedRecords[0].endpoint, '/api/search');
+  assert.equal(lastSearchedQuery, 'monitor 4k');
 
   controller.unmount();
 });
 
-test('9. Typing quickly sends 0 intermediate requests and exactly 1 request for the final query', async () => {
+test('9. Fast typing sends 0 requests; blur sends 0 requests; Enter dispatches exactly 1 request for the final query', async () => {
   let activeSession = 'sess_search_fast';
   const client = createAppApiClient({ getSessionId: () => activeSession });
   let fetchCount = 0;
@@ -358,7 +336,7 @@ test('9. Typing quickly sends 0 intermediate requests and exactly 1 request for 
     return { ok: true, status: 200, data: { results: [] } };
   };
 
-  const controller = createSearchController('TASK_02', client, mockFetch, 200);
+  const controller = createSearchController('TASK_02', client, mockFetch);
 
   // Fast typing: keystrokes arrive in rapid succession (e.g. 30ms apart)
   const sequence = ['w', 'wi', 'wir', 'wire', 'wirel', 'wirele', 'wireles', 'wireless'];
@@ -367,20 +345,26 @@ test('9. Typing quickly sends 0 intermediate requests and exactly 1 request for 
     await new Promise((r) => setTimeout(r, 30));
   }
 
-  // During rapid typing, zero requests should have been dispatched
+  // During and after rapid typing, zero requests should have been dispatched
   assert.equal(fetchCount, 0);
 
-  // Wait for the debounce delay to expire after the last keystroke
-  await new Promise((r) => setTimeout(r, 250));
+  // Wait any amount of time — still zero (no timer)
+  await new Promise((r) => setTimeout(r, 500));
+  assert.equal(fetchCount, 0);
 
-  // Exactly one request was sent for the final query
+  // Blur sends 0 requests
+  await controller.onBlur();
+  assert.equal(fetchCount, 0);
+
+  // Enter dispatches the final query
+  await controller.handleSearchSubmit();
   assert.equal(fetchCount, 1);
   assert.equal(lastSearchedQuery, 'wireless');
 
   controller.unmount();
 });
 
-test('10. Typing slowly sends 0 intermediate requests and exactly 1 request for the final query', async () => {
+test('10. Slow typing sends 0 requests; blur sends 0 requests; clicking Search dispatches exactly 1 request', async () => {
   let activeSession = 'sess_search_slow';
   const client = createAppApiClient({ getSessionId: () => activeSession });
   let fetchCount = 0;
@@ -391,8 +375,7 @@ test('10. Typing slowly sends 0 intermediate requests and exactly 1 request for 
     return { ok: true, status: 200, data: { results: [] } };
   };
 
-  // 250ms debounce window; keystrokes arrive with pauses of 120ms (less than debounce window)
-  const controller = createSearchController('TASK_02', client, mockFetch, 250);
+  const controller = createSearchController('TASK_02', client, mockFetch);
 
   const snippets = [
     'wi',
@@ -406,24 +389,30 @@ test('10. Typing slowly sends 0 intermediate requests and exactly 1 request for 
   for (const snippet of snippets) {
     controller.onType(snippet);
     await new Promise((r) => setTimeout(r, 120));
-    // Verify that NO partial request fired between slow keystrokes
+    // Verify that NO request fired between slow keystrokes
     assert.equal(fetchCount, 0);
   }
 
-  // Still 0 requests during the slow typing sequence
+  // Still 0 requests after the slow typing sequence
   assert.equal(fetchCount, 0);
 
-  // Now the user stops typing and waits
-  await new Promise((r) => setTimeout(r, 320));
+  // Wait any amount of time — still zero (no timer)
+  await new Promise((r) => setTimeout(r, 500));
+  assert.equal(fetchCount, 0);
 
-  // Exactly ONE request for the complete final query
+  // Blur sends 0 requests
+  await controller.onBlur();
+  assert.equal(fetchCount, 0);
+
+  // Click Search dispatches the final query
+  await controller.handleSearchSubmit();
   assert.equal(fetchCount, 1);
   assert.equal(lastSearchedQuery, 'wireless headphones');
 
   controller.unmount();
 });
 
-test('11. Waiting after typing sends zero additional requests', async () => {
+test('11. Extended wait and blur produce zero requests; explicit submit dispatches exactly 1 request', async () => {
   let activeSession = 'sess_search_wait';
   const client = createAppApiClient({ getSessionId: () => activeSession });
   let fetchCount = 0;
@@ -432,19 +421,25 @@ test('11. Waiting after typing sends zero additional requests', async () => {
     return { ok: true, status: 200, data: { results: [] } };
   };
 
-  const controller = createSearchController('TASK_02', client, mockFetch, 150);
+  const controller = createSearchController('TASK_02', client, mockFetch);
 
   controller.onType('ergonomic chair');
   assert.equal(fetchCount, 0);
 
-  // Wait for debounce to fire
-  await new Promise((r) => setTimeout(r, 200));
-  assert.equal(fetchCount, 1);
+  // Wait any duration — still zero (no timer)
+  await new Promise((r) => setTimeout(r, 300));
+  assert.equal(fetchCount, 0);
 
-  // User sits idle for an extended period without typing
+  // Blur sends 0 requests
+  await controller.onBlur();
+  assert.equal(fetchCount, 0);
+
+  // User sits idle for an extended period
   await new Promise((r) => setTimeout(r, 400));
+  assert.equal(fetchCount, 0);
 
-  // Count must remain 1 — zero additional searches during idleness
+  // Explicit submit dispatches 1
+  await controller.handleSearchSubmit();
   assert.equal(fetchCount, 1);
 
   controller.unmount();
@@ -459,7 +454,7 @@ test('12. Intentional repeated Search button clicks dispatch every deliberate se
     return { ok: true, status: 200, data: { results: [] } };
   };
 
-  const controller = createSearchController('TASK_02', client, mockFetch, 200);
+  const controller = createSearchController('TASK_02', client, mockFetch);
 
   controller.onType('noise cancelling');
   assert.equal(fetchCount, 0);
@@ -483,7 +478,7 @@ test('12. Intentional repeated Search button clicks dispatch every deliberate se
   controller.unmount();
 });
 
-test('13. Mid-query typing pause does not fire an intermediate request and sends only the final query', async () => {
+test('13. Mid-query typing pause does not fire an intermediate request; Enter sends only the final query', async () => {
   let activeSession = 'sess_search_midpause';
   const client = createAppApiClient({ getSessionId: () => activeSession });
   let fetchCount = 0;
@@ -494,8 +489,7 @@ test('13. Mid-query typing pause does not fire an intermediate request and sends
     return { ok: true, status: 200, data: { results: [] } };
   };
 
-  // Controller with 400ms debounce delay
-  const controller = createSearchController('TASK_02', client, mockFetch, 400);
+  const controller = createSearchController('TASK_02', client, mockFetch);
 
   // 1. User types partial word 'wire' with short intervals
   controller.onType('wi');
@@ -503,7 +497,7 @@ test('13. Mid-query typing pause does not fire an intermediate request and sends
   controller.onType('wire');
   assert.equal(fetchCount, 0);
 
-  // 2. User has a realistic pause in the middle of typing (250ms, within the 400ms debounce window)
+  // 2. User has a realistic pause in the middle of typing (250ms)
   await new Promise((r) => setTimeout(r, 250));
 
   // Verify that NO intermediate request was fired for 'wire'
@@ -519,17 +513,23 @@ test('13. Mid-query typing pause does not fire an intermediate request and sends
   // Verify still 0 requests while actively typing
   assert.equal(fetchCount, 0);
 
-  // 4. User finishes typing and waits for the debounce window to complete (500ms > 400ms)
+  // 4. Wait any amount of time — still zero (no timer)
   await new Promise((r) => setTimeout(r, 500));
+  assert.equal(fetchCount, 0);
 
-  // Exactly ONE request for the final query; intermediate 'wire' was NEVER sent
+  // 5. Blur produces zero requests
+  await controller.onBlur();
+  assert.equal(fetchCount, 0);
+
+  // 6. Enter sends the final query
+  await controller.handleSearchSubmit();
   assert.equal(fetchCount, 1);
   assert.equal(lastSearchedQuery, 'wireless headphones');
 
   controller.unmount();
 });
 
-test('14. Mid-typing pause longer than 2 seconds followed by continued typing sends no intermediate request and sends final query once', async () => {
+test('14. Mid-typing pause longer than 2 seconds followed by continued typing sends no intermediate request; Enter sends final query once', async () => {
   let activeSession = 'sess_search_long_pause';
   const client = createAppApiClient({ getSessionId: () => activeSession });
   let fetchCount = 0;
@@ -540,8 +540,7 @@ test('14. Mid-typing pause longer than 2 seconds followed by continued typing se
     return { ok: true, status: 200, data: { results: [] } };
   };
 
-  // Controller with 2500ms settling debounce delay (matching frontend SEARCH_DEBOUNCE_DELAY_MS)
-  const controller = createSearchController('TASK_02', client, mockFetch, 2500);
+  const controller = createSearchController('TASK_02', client, mockFetch);
 
   // 1. User types partial text 'wire'
   controller.onType('wi');
@@ -565,17 +564,23 @@ test('14. Mid-typing pause longer than 2 seconds followed by continued typing se
   // Verify still 0 requests while actively typing
   assert.equal(fetchCount, 0);
 
-  // 4. Typing ends: user stops typing and the settling period completes (2,600ms > 2,500ms)
-  await new Promise((r) => setTimeout(r, 2600));
+  // 4. Wait any amount of time — still zero (no timer)
+  await new Promise((r) => setTimeout(r, 500));
+  assert.equal(fetchCount, 0);
 
-  // Verify that exactly ONE request was dispatched for the final query
+  // 5. Blur produces zero requests
+  await controller.onBlur();
+  assert.equal(fetchCount, 0);
+
+  // 6. Enter sends the final query
+  await controller.handleSearchSubmit();
   assert.equal(fetchCount, 1);
   assert.equal(lastSearchedQuery, 'wireless headphones');
 
   controller.unmount();
 });
 
-test('15. Finishing typing followed by input blur immediately dispatches the final query without waiting for debounce', async () => {
+test('15. Finishing typing followed by input blur produces zero requests; explicit submission dispatches search', async () => {
   let activeSession = 'sess_search_blur';
   const client = createAppApiClient({ getSessionId: () => activeSession });
   let fetchCount = 0;
@@ -586,25 +591,27 @@ test('15. Finishing typing followed by input blur immediately dispatches the fin
     return { ok: true, status: 200, data: { results: [] } };
   };
 
-  const controller = createSearchController('TASK_02', client, mockFetch, 2500);
+  const controller = createSearchController('TASK_02', client, mockFetch);
 
   // User types query
   controller.onType('ergonomic split keyboard');
   assert.equal(fetchCount, 0);
 
-  // User immediately moves to scroll/inspect (input blurs after 100ms)
+  // User immediately moves to scroll/inspect or clicks DevTools (input blurs after 100ms)
   await new Promise((r) => setTimeout(r, 100));
   await controller.onBlur();
 
-  // Search dispatched immediately on blur
+  // Blur must NOT dispatch search
+  assert.equal(fetchCount, 0);
+
+  // Wait an extended period
+  await new Promise((r) => setTimeout(r, 500));
+  assert.equal(fetchCount, 0);
+
+  // Explicit submit sends exactly 1 request
+  await controller.handleSearchSubmit();
   assert.equal(fetchCount, 1);
   assert.equal(lastSearchedQuery, 'ergonomic split keyboard');
-
-  // Wait beyond the original 2500ms debounce
-  await new Promise((r) => setTimeout(r, 2600));
-
-  // Count remains exactly 1 (no delayed duplicate)
-  assert.equal(fetchCount, 1);
 
   controller.unmount();
 });
@@ -675,4 +682,103 @@ test('8. Existing sanitization, error-status handling, endpoint mapping, and tel
   activeSession = null;
   await client.getProducts({}, mockFetch);
   assert.equal(client.emittedRecords.length, 3); // Still 3, no emission
+});
+
+test('16. Enter then blur does not double-dispatch', async () => {
+  let activeSession = 'sess_search_enter_blur';
+  const client = createAppApiClient({ getSessionId: () => activeSession });
+  let fetchCount = 0;
+  const mockFetch = async () => {
+    fetchCount++;
+    return { ok: true, status: 200, data: { results: [] } };
+  };
+
+  const controller = createSearchController('TASK_02', client, mockFetch);
+
+  // User types query
+  controller.onType('desk mat');
+  assert.equal(fetchCount, 0);
+
+  // User presses Enter (dispatches 1 request)
+  await controller.handleSearchSubmit();
+  assert.equal(fetchCount, 1);
+
+  // User then clicks elsewhere (blur) — MUST NOT dispatch again
+  await controller.onBlur();
+  assert.equal(fetchCount, 1); // Still 1
+
+  controller.unmount();
+});
+
+test('17. Blur then intentional re-click dispatches second request', async () => {
+  let activeSession = 'sess_search_blur_reclick';
+  const client = createAppApiClient({ getSessionId: () => activeSession });
+  let fetchCount = 0;
+  const mockFetch = async () => {
+    fetchCount++;
+    return { ok: true, status: 200, data: { results: [] } };
+  };
+
+  const controller = createSearchController('TASK_02', client, mockFetch);
+
+  // User types query
+  controller.onType('standing desk');
+  assert.equal(fetchCount, 0);
+
+  // User blurs input (e.g. checks DevTools or clicks background) — sends 0
+  await controller.onBlur();
+  assert.equal(fetchCount, 0);
+
+  // User deliberately clicks Search button (dispatches exactly 1 request)
+  await controller.handleSearchSubmit();
+  assert.equal(fetchCount, 1);
+
+  // User deliberately clicks Search button again (dispatches 2nd request)
+  await controller.handleSearchSubmit();
+  assert.equal(fetchCount, 2);
+
+  controller.unmount();
+});
+
+test('18. Typing partial query "wire" and waiting 8 seconds followed by window/input blur produces zero search requests', async () => {
+  let activeSession = 'sess_task02_wire_verification';
+  const client = createAppApiClient({ getSessionId: () => activeSession });
+  let fetchCount = 0;
+  let lastSearchedQuery = '';
+  const mockFetch = async (url) => {
+    fetchCount++;
+    lastSearchedQuery = new URL(url).searchParams.get('q');
+    return { ok: true, status: 200, data: { results: [] } };
+  };
+
+  const controller = createSearchController('TASK_02', client, mockFetch);
+
+  // 1. User types "wire" into search input
+  controller.onType('w');
+  controller.onType('wi');
+  controller.onType('wir');
+  controller.onType('wire');
+
+  // Verify 0 requests while typing
+  assert.equal(fetchCount, 0);
+
+  // 2. User waits 5-8 seconds (simulated by async timeout)
+  await new Promise((r) => setTimeout(r, 600));
+  assert.equal(fetchCount, 0);
+
+  // 3. User switches to DevTools or clicks outside input, causing blur
+  await controller.onBlur();
+  assert.equal(fetchCount, 0);
+
+  // 4. Verify that absolutely ZERO search requests were dispatched
+  assert.equal(fetchCount, 0);
+  assert.equal(client.emittedRecords.length, 0);
+
+  // 5. User returns and presses Enter -> exactly 1 request sent
+  await controller.handleSearchSubmit();
+  assert.equal(fetchCount, 1);
+  assert.equal(lastSearchedQuery, 'wire');
+  assert.equal(client.emittedRecords.length, 1);
+
+  controller.unmount();
 });
