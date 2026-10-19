@@ -51,42 +51,4 @@ sess_b0b45cf8b63d440b92c0,HUMAN,NONE,TASK_02,p_01,1792214499987,0,228
 sess_843a0702b36f49aba2b8,HUMAN,NONE,TASK_02,p_01,1792398371241,0,93
 sess_899b2d29c4f54e968658,HUMAN,NONE,TASK_01,p_01,1792402164062,0,794
 sess_1a053be5f70f487c9a05,HUMAN,NONE,TASK_02,p_01,1792403340042,0,215
-Revise the CrossTrace Phase 2 implementation plan based on the following review findings.
-
-This remains a planning-only request. Do not modify files, collect sessions, train models, export datasets, or change existing experiment outputs.
-
-Required revisions:
-
-1. **Reconcile the feature configuration**
-   - Explicitly enumerate all 38 proposed kinematics-only features.
-   - Verify every feature name against the existing 76-feature schema and canonical feature configuration.
-   - Provide a complete inclusion/exclusion table with a rationale for each excluded feature.
-   - Do not change the existing Experiment A configuration.
-
-2. **Correct the windowing validation**
-   - Keep the proposed 30-event window and 15-event stride as a candidate design, but explain how incomplete windows and sessions with fewer than 30 eligible events will be handled.
-   - Do not use a statistical test of event counts as evidence of invariance when window sizes are fixed by construction.
-   - Specify audits for window duration, event composition, task, collection harness, and residual class-correlated artifacts.
-   - Assess whether fixed-duration windows should be a separate experiment rather than mixing the two windowing approaches.
-
-3. **Strengthen matched collection**
-   - Define comparable human and automated task steps for TASK_01, TASK_02, and TASK_03.
-   - Specify target collection conditions and how task completion, duration, window eligibility, and failed/incomplete sessions will be handled.
-   - Explicitly identify remaining differences between human and automation collection harnesses that could confound results.
-
-4. **Strengthen the unseen-method protocol**
-   - Keep Method 2 quarantined from feature selection, threshold selection, model tuning, and all development decisions.
-   - Define when the development pipeline is frozen and how the final unseen-method evaluation is conducted.
-   - Clarify that a minimum-jerk trajectory alone does not establish realistic human behavior or prove robust generalization.
-
-5. **Prevent window-level leakage**
-   - Keep all windows from the same session in one partition.
-   - Keep human participant groups separate between training and evaluation.
-   - Report both window-level and session-level results, with uncertainty and class-specific error rates.
-   - Explain how overlapping windows affect effective sample size and confidence intervals.
-
-6. **Preserve all existing data and outputs**
-   - Do not modify ml/data/, existing Phase 1 outputs, or the canonical Experiment A configuration.
-   - Keep all Phase 2 outputs isolated in the proposed new directories.
-
-Return the revised plan and a short change log. Do not implement anything until I review and explicitly approve the revised plan.
+sess_d0ebf5fe362a42cebe17,HUMAN,NONE,TASK_03,p_01,1792407859896,0,586
