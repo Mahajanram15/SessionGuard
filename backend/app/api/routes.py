@@ -36,6 +36,15 @@ from backend.app.schemas.mock_domain import (
     CheckoutVerifyRequest,
     CheckoutVerifyResponse,
 )
+from backend.app.schemas.elearning_domain import (
+    MOCK_COURSES,
+    CourseItem,
+    CourseDetailResponse,
+    CourseListResponse,
+    CourseSearchResponse,
+    EnrollmentRequest,
+    EnrollmentResponse,
+)
 from backend.app.services.session_service import session_service
 from backend.app.services.risk_service import risk_service
 
@@ -356,4 +365,124 @@ async def verify_checkout(req: CheckoutVerifyRequest):
         is_valid=True,
         message="Mock checkout parameters verified for research demonstration"
     )
+
+# ------------------------------------------------------------------------------
+# 7. LearnSphere E-Learning Domain Endpoints (Controlled Research Experiments)
+# NOTE: These are lightweight, deterministic demonstration endpoints for
+# the LearnSphere e-learning platform. They simulate course catalog, lesson
+# navigation, and mock enrollment without persisting PII, charging money, or
+# modifying research datasets.
+# ------------------------------------------------------------------------------
+
+@router.get("/courses", response_model=CourseListResponse, status_code=status.HTTP_200_OK)
+async def list_courses(
+    category: Optional[str] = Query(None, description="Optional category filter (e.g. 'Cybersecurity')"),
+    difficulty: Optional[str] = Query(None, description="Optional difficulty filter (e.g. 'Beginner', 'Intermediate', 'Advanced')"),
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    page_size: int = Query(10, ge=1, le=50, description="Items per page")
+):
+    """
+    Returns a deterministic paginated list of mock courses for LearnSphere.
+    Supports optional category and difficulty filtering.
+    """
+    items = list(MOCK_COURSES.values())
+    if category:
+        cat_lower = category.strip().lower()
+        items = [c for c in items if c["category"].lower() == cat_lower]
+
+    if difficulty:
+        diff_lower = difficulty.strip().lower()
+        items = [c for c in items if c["difficulty"].lower() == diff_lower]
+
+    total = len(items)
+    start = (page - 1) * page_size
+    end = start + page_size
+    paginated_items = items[start:end]
+
+    return CourseListResponse(
+        courses=[CourseItem(**c) for c in paginated_items],
+        total=total,
+        page=page,
+        page_size=page_size,
+        category=category,
+        difficulty=difficulty,
+    )
+
+@router.get("/courses/details", response_model=CourseDetailResponse, status_code=status.HTTP_200_OK)
+async def get_course_details(
+    id: str = Query(..., min_length=1, max_length=64, description="Unique course identifier")
+):
+    """
+    Returns full details, curriculum lessons, and quiz definitions for a validated course ID.
+    Returns 404 if the course ID is not found.
+    """
+    course = MOCK_COURSES.get(id)
+    if not course:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Course with ID '{id}' not found"
+        )
+    return CourseDetailResponse(**course)
+
+@router.get("/courses/search", response_model=CourseSearchResponse, status_code=status.HTTP_200_OK)
+async def search_courses(
+    q: str = Query(..., min_length=1, max_length=128, description="Course search query string"),
+    limit: int = Query(10, ge=1, le=50, description="Maximum number of results to return")
+):
+    """
+    Returns deterministic course search results matching title, category, instructor, or description.
+    """
+    q_lower = q.strip().lower()
+    matches = [
+        c for c in MOCK_COURSES.values()
+        if q_lower in c["title"].lower()
+        or q_lower in c["category"].lower()
+        or q_lower in c["instructor"].lower()
+        or q_lower in c["description"].lower()
+    ]
+    sliced = matches[:limit]
+    return CourseSearchResponse(
+        query=q,
+        results=[CourseItem(**c) for c in sliced],
+        total_results=len(matches),
+        limit=limit
+    )
+
+@router.post("/courses/enroll", response_model=EnrollmentResponse, status_code=status.HTTP_201_CREATED)
+async def enroll_course(req: EnrollmentRequest):
+    """
+    Simulates student course enrollment for research demonstrations.
+    Validates course existence and enrollment plan without charging money or persisting PII.
+    """
+    course = MOCK_COURSES.get(req.course_id)
+    if not course:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Course with ID '{req.course_id}' not found in course catalog"
+        )
+
+    allowed_plans = {"free", "pro_certificate"}
+    plan_clean = req.plan_type.strip().lower()
+    if plan_clean not in allowed_plans:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid plan_type '{req.plan_type}'. Allowed options: {sorted(list(allowed_plans))}"
+        )
+
+    import uuid
+    from datetime import datetime
+    demo_enrollment_id = f"enr_{uuid.uuid4().hex[:12]}"
+    now = datetime.utcnow()
+
+    return EnrollmentResponse(
+        status="ENROLLED",
+        enrollment_id=demo_enrollment_id,
+        course_id=req.course_id,
+        course_title=course["title"],
+        plan_type=plan_clean,
+        is_demo=True,
+        enrolled_at=now,
+        message=f"Simulated enrollment confirmed for '{course['title']}'. No financial transaction processed or stored."
+    )
+
 
