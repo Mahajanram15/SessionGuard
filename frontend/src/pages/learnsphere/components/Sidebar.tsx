@@ -31,7 +31,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab = 'home', onNavigate
     <aside className="w-16 sm:w-20 bg-white rounded-[28px] py-6 px-2 flex flex-col items-center justify-between border border-slate-100 shadow-[0_10px_30px_rgba(0,0,0,0.03)] shrink-0 self-stretch min-h-[780px]">
       {/* Brand Icon */}
       <div className="flex flex-col items-center space-y-8">
-        <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-[#6941C6] to-[#9E77ED] flex items-center justify-center shadow-md shadow-purple-500/20 text-white cursor-pointer hover:scale-105 transition-transform" title="LearnSphere Platform">
+        <div
+          onClick={() => onNavigate?.('home')}
+          className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-[#6941C6] to-[#9E77ED] flex items-center justify-center shadow-md shadow-purple-500/20 text-white cursor-pointer hover:scale-105 transition-transform"
+          title="LearnSphere Platform (Return Home)"
+        >
           <GraduationCap className="w-6 h-6 stroke-[2.2]" />
         </div>
 

@@ -48,6 +48,7 @@ export const LearnSphereLandingPage: React.FC<LearnSphereLandingPageProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>('All');
   const [selectedCourse, setSelectedCourse] = useState<CourseItem | null>(null);
+  const [selectedSidebarTab, setSelectedSidebarTab] = useState<string>('home');
 
   // Lesson player view & session-local progress state
   const [activeView, setActiveView] = useState<'catalog' | 'player'>('catalog');
@@ -152,6 +153,34 @@ export const LearnSphereLandingPage: React.FC<LearnSphereLandingPageProps> = ({
 
   const handleBackToCatalog = () => {
     setActiveView('catalog');
+    setSelectedSidebarTab('home');
+  };
+
+  const handleSidebarNavigate = (tab: string) => {
+    setSelectedSidebarTab(tab);
+    if (tab === 'home') {
+      if (activeView !== 'catalog') {
+        setActiveView('catalog');
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      setSessionNotice(null);
+    } else if (tab === 'courses') {
+      if (activeView !== 'catalog') {
+        setActiveView('catalog');
+      }
+      coursesSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
+      setSessionNotice(null);
+    } else {
+      const labels: Record<string, string> = {
+        calendar: 'Schedule',
+        assessments: 'Achievements',
+        community: 'Community',
+        messages: 'Messages',
+        settings: 'Settings',
+      };
+      const moduleName = labels[tab] || tab;
+      setSessionNotice(`LearnSphere Demo Notice: The "${moduleName}" module is not implemented yet. It serves as an illustrative LMS section for behavioral telemetry.`);
+    }
   };
 
   const handleToggleCompleteLesson = (courseId: string, lessonId: string) => {
@@ -412,7 +441,7 @@ export const LearnSphereLandingPage: React.FC<LearnSphereLandingPageProps> = ({
       {/* Main Centered Rounded Dashboard Surface */}
       <div className="max-w-[1400px] w-full bg-[#FAFAFE] rounded-[36px] shadow-[0_20px_60px_-15px_rgba(79,70,229,0.07)] border border-white/80 p-3.5 sm:p-6 lg:p-7 flex flex-col md:flex-row gap-5 lg:gap-6 relative z-10">
         {/* Left Floating Sidebar */}
-        <Sidebar activeTab="home" onNavigate={() => {}} />
+        <Sidebar activeTab={selectedSidebarTab} onNavigate={handleSidebarNavigate} />
 
         {/* Main Content Area */}
         <main className="flex-1 flex flex-col space-y-5 overflow-hidden min-w-0">
