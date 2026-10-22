@@ -8,18 +8,39 @@ import { LearningChart } from './components/LearningChart';
 import { PromoCard } from './components/PromoCard';
 import { CourseDetailModal } from './components/CourseDetailModal';
 import { LessonPlayerView } from './components/LessonPlayerView';
-import { CourseItem, LearnerProgressState, QuizAttempt } from '../../types';
-import { AppApiClient } from '../../services/api';
-import { ChevronLeft, ChevronRight, Loader2, BookOpen } from 'lucide-react';
+import { SessionAnalysisModal } from './components/SessionAnalysisModal';
+import { CourseItem, LearnerProgressState, QuizAttempt, RiskResponse, ExplanationResponse } from '../../types';
+import { AppApiClient, apiClient } from '../../services/api';
+import { BehavioralSDK, TelemetryStats } from '@behavioral-integrity/sdk';
+import {
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  BookOpen,
+  Radio,
+  Square,
+  Bot,
+  User,
+  RefreshCw,
+  Cpu,
+} from 'lucide-react';
 
 interface LearnSphereLandingPageProps {
   appClient: AppApiClient;
+  sdk?: BehavioralSDK;
+  stats?: TelemetryStats;
+  onRefreshStats?: () => void;
   onExploreCatalog?: () => void;
+  onNavigateToMatrix?: () => void;
 }
 
 export const LearnSphereLandingPage: React.FC<LearnSphereLandingPageProps> = ({
   appClient,
+  sdk,
+  stats,
+  onRefreshStats,
   onExploreCatalog: _onExploreCatalog,
+  onNavigateToMatrix,
 }) => {
   const [courses, setCourses] = useState<CourseItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -36,6 +57,16 @@ export const LearnSphereLandingPage: React.FC<LearnSphereLandingPageProps> = ({
 
   // Carousel page state for Popular Courses section
   const [popularCarouselIndex, setPopularCarouselIndex] = useState<number>(0);
+
+  // Stage 4: Session Controller & Verification Analysis State
+  const [analysisModalOpen, setAnalysisModalOpen] = useState<boolean>(false);
+  const [analyzedSessionId, setAnalyzedSessionId] = useState<string>('');
+  const [analyzedScenarioType, setAnalyzedScenarioType] = useState<'manual' | 'synthetic_automation'>('manual');
+  const [analyzedEventCount, setAnalyzedEventCount] = useState<number>(0);
+  const [analyzedRiskData, setAnalyzedRiskData] = useState<RiskResponse | null>(null);
+  const [analyzedExplanationData, setAnalyzedExplanationData] = useState<ExplanationResponse | null>(null);
+  const [sessionActionLoading, setSessionActionLoading] = useState<boolean>(false);
+  const [sessionNotice, setSessionNotice] = useState<string | null>(null);
 
   const coursesSectionRef = useRef<HTMLDivElement>(null);
 
@@ -157,6 +188,185 @@ export const LearnSphereLandingPage: React.FC<LearnSphereLandingPageProps> = ({
     });
   };
 
+  const handleStartManualSession = async () => {
+    if (!sdk) return;
+    setSessionActionLoading(true);
+    setSessionNotice(null);
+    try {
+      const sId = await sdk.startSession({
+        collectionMode: 'HUMAN',
+        taskId: 'TASK_LEARN_MANUAL',
+      });
+      await sdk.start({
+        collectionMode: 'HUMAN',
+        taskId: 'TASK_LEARN_MANUAL',
+      });
+      onRefreshStats?.();
+      setSessionNotice(`Manual session active (${sId.substring(0, 16)}...). Telemetry is capturing as you learn.`);
+    } catch (err: any) {
+      console.error('Failed to start manual session:', err);
+      setSessionNotice(`Error starting session: ${err?.message || err}`);
+    } finally {
+      setSessionActionLoading(false);
+    }
+  };
+
+  const handleEndSessionAndInspect = async (intendedScenario: 'manual' | 'synthetic_automation' = 'manual') => {
+    if (!sdk) return;
+    const currentId = stats?.sessionId;
+    if (!currentId) return;
+
+    setSessionActionLoading(true);
+    setSessionNotice('Ending session, computing 64-feature vector & evaluating frozen XGBoost inference...');
+    try {
+      await sdk.flush();
+      const endRes = await sdk.stop(intendedScenario === 'synthetic_automation' ? 'AUTOMATED_SIMULATION_COMPLETED' : 'MANUAL_SESSION_COMPLETED');
+      onRefreshStats?.();
+
+      const [riskRes, explRes] = await Promise.all([
+        apiClient.getRiskScore(currentId),
+        apiClient.getExplanation(currentId),
+      ]);
+
+      setAnalyzedSessionId(currentId);
+      setAnalyzedScenarioType(intendedScenario);
+      setAnalyzedEventCount(endRes?.total_events_captured ?? stats?.eventsSent ?? 0);
+      setAnalyzedRiskData(riskRes);
+      setAnalyzedExplanationData(explRes);
+      setAnalysisModalOpen(true);
+      setSessionNotice(null);
+    } catch (err: any) {
+      console.error('Failed to evaluate session:', err);
+      setSessionNotice(`Failed to evaluate session: ${err?.message || err}`);
+    } finally {
+      setSessionActionLoading(false);
+    }
+  };
+
+  const handleRunSyntheticBotSimulation = async () => {
+    if (!sdk) return;
+    setSessionActionLoading(true);
+    setSessionNotice('Running controlled synthetic bot simulation against LearnSphere...');
+    try {
+      const sId = await sdk.startSession({
+        collectionMode: 'AUTOMATED',
+        automationCondition: 'AUTOMATED_DETERMINISTIC',
+        taskId: 'TASK_LEARN_AUTOMATION',
+        label: 1,
+      });
+      await sdk.start({
+        collectionMode: 'AUTOMATED',
+        automationCondition: 'AUTOMATED_DETERMINISTIC',
+        taskId: 'TASK_LEARN_AUTOMATION',
+        label: 1,
+      });
+      onRefreshStats?.();
+
+      const baseT = Date.now();
+
+      // Deterministic linear mouse telemetry (constant velocity, zero curvature)
+      for (let i = 0; i < 16; i++) {
+        sdk.recordEvent({
+          event_type: 'mouse_move',
+          client_timestamp: baseT + i * 33,
+          event_data: {
+            x: 120 + i * 25,
+            y: 180 + i * 20,
+            distance_px: 32.0,
+            time_delta_ms: 33,
+            velocity_px_s: 960.0,
+            acceleration_px_s2: 0.0,
+            angle_degrees: 38.6,
+            direction_change_deg: 0.0,
+          },
+        });
+      }
+
+      // Robotic click
+      sdk.recordEvent({
+        event_type: 'mouse_click',
+        client_timestamp: baseT + 580,
+        event_data: {
+          x: 450,
+          y: 320,
+          button: 0,
+          click_type: 'single',
+          time_since_last_click_ms: 550,
+          target_category: 'button',
+        },
+      });
+
+      // Robotic keystroke intervals (constant 70ms dwell, 50ms flight, 0 variance)
+      for (let k = 0; k < 6; k++) {
+        sdk.recordEvent({
+          event_type: 'key_meta',
+          client_timestamp: baseT + 750 + k * 120,
+          event_data: {
+            dwell_ms: 70,
+            flight_ms: 50,
+            inter_key_interval_ms: 120,
+            is_backspace: false,
+            is_paste: false,
+          },
+        });
+      }
+
+      // Robotic scroll burst
+      sdk.recordEvent({
+        event_type: 'scroll',
+        client_timestamp: baseT + 1550,
+        event_data: {
+          scroll_x: 0,
+          scroll_y: 220,
+          delta_x: 0,
+          delta_y: 220,
+          velocity_px_s: 1500.0,
+          direction: 'down',
+          time_since_last_scroll_ms: 100,
+        },
+      });
+
+      // Navigation & API access
+      sdk.recordEvent({
+        event_type: 'navigation',
+        client_timestamp: baseT + 1800,
+        event_data: {
+          path: '/api/courses/details?course_id=course_cs101',
+          referrer: '/api/courses',
+          dwell_time_ms: 1800,
+          sequence_number: 2,
+        },
+      });
+
+      // Instrumented domain API access
+      await appClient.getCourses({ page: 1, page_size: 10 });
+      await appClient.getCourseDetails('course_cs101');
+
+      // Flush buffer and finalize session
+      await sdk.flush();
+      const endRes = await sdk.stop('AUTOMATED_DETERMINISTIC_SIMULATION_COMPLETED');
+      onRefreshStats?.();
+
+      const [riskRes, explRes] = await Promise.all([
+        apiClient.getRiskScore(sId),
+        apiClient.getExplanation(sId),
+      ]);
+
+      setAnalyzedSessionId(sId);
+      setAnalyzedScenarioType('synthetic_automation');
+      setAnalyzedEventCount(endRes?.total_events_captured ?? 25);
+      setAnalyzedRiskData(riskRes);
+      setAnalyzedExplanationData(explRes);
+      setAnalysisModalOpen(true);
+      setSessionNotice(null);
+    } catch (err: any) {
+      console.error('Synthetic simulation failed:', err);
+      setSessionNotice(`Synthetic simulation error: ${err?.message || err}`);
+    } finally {
+      setSessionActionLoading(false);
+    }
+  };
+
   if (activeView === 'player' && playerCourse) {
     return (
       <>
@@ -178,6 +388,16 @@ export const LearnSphereLandingPage: React.FC<LearnSphereLandingPageProps> = ({
             onStartLearning={handleStartLearning}
           />
         )}
+        <SessionAnalysisModal
+          isOpen={analysisModalOpen}
+          onClose={() => setAnalysisModalOpen(false)}
+          scenarioType={analyzedScenarioType}
+          sessionId={analyzedSessionId}
+          totalEvents={analyzedEventCount}
+          riskData={analyzedRiskData}
+          explanationData={analyzedExplanationData}
+          onNavigateToMatrix={onNavigateToMatrix}
+        />
       </>
     );
   }
@@ -195,7 +415,88 @@ export const LearnSphereLandingPage: React.FC<LearnSphereLandingPageProps> = ({
         <Sidebar activeTab="home" onNavigate={() => {}} />
 
         {/* Main Content Area */}
-        <main className="flex-1 flex flex-col space-y-6 overflow-hidden min-w-0">
+        <main className="flex-1 flex flex-col space-y-5 overflow-hidden min-w-0">
+          {/* Stage 4: Live Telemetry Session Controller Bar */}
+          <div className="bg-white/95 rounded-2xl border border-purple-200/90 shadow-sm p-3.5 px-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center border border-purple-100 shrink-0">
+                <Radio className={`w-4 h-4 ${stats?.isRunning ? 'text-emerald-600 animate-pulse' : 'text-slate-400'}`} />
+              </div>
+              <div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-xs font-bold text-slate-800">
+                    CrossTrace Live Session Controller
+                  </span>
+                  <span
+                    className={`text-[10px] font-mono px-2 py-0.2 rounded-full uppercase font-bold ${
+                      stats?.isRunning
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : 'bg-slate-100 text-slate-500'
+                    }`}
+                  >
+                    {stats?.isRunning ? 'Streaming Active' : 'Idle'}
+                  </span>
+                </div>
+                <p className="text-[11px] font-mono text-slate-500 mt-0.5">
+                  {stats?.isRunning ? (
+                    <>Session: <span className="text-purple-700 font-bold">{stats.sessionId?.substring(0, 18)}...</span> • Events Sent: <span className="font-bold text-slate-800">{stats.eventsSent}</span></>
+                  ) : (
+                    'Evaluate human operator vs. synthetic bot behaviors against LearnSphere.'
+                  )}
+                </p>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center space-x-2">
+              {!stats?.isRunning ? (
+                <>
+                  <button
+                    onClick={handleStartManualSession}
+                    disabled={sessionActionLoading}
+                    className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-slate-800 text-xs font-bold border border-slate-200 shadow-sm transition-all flex items-center space-x-1.5 cursor-pointer disabled:opacity-40"
+                  >
+                    <User className="w-3.5 h-3.5 text-purple-600" />
+                    <span>Start Manual Session</span>
+                  </button>
+                  <button
+                    onClick={handleRunSyntheticBotSimulation}
+                    disabled={sessionActionLoading}
+                    className="px-3.5 py-1.5 rounded-xl bg-[#6941C6] hover:bg-[#53389E] text-white text-xs font-bold shadow-md shadow-purple-600/20 transition-all flex items-center space-x-1.5 cursor-pointer disabled:opacity-40"
+                  >
+                    <Bot className="w-3.5 h-3.5" />
+                    <span>Run Synthetic Bot Simulation</span>
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => sdk?.flush()}
+                    title="Force Flush Buffer"
+                    className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-all cursor-pointer"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => handleEndSessionAndInspect('manual')}
+                    disabled={sessionActionLoading}
+                    className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md transition-all flex items-center space-x-1.5 cursor-pointer disabled:opacity-40"
+                  >
+                    <Square className="w-3 h-3 fill-current" />
+                    <span>End Session &amp; Analyze</span>
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {sessionNotice && (
+            <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl text-purple-800 text-xs flex items-center space-x-2">
+              <Cpu className="w-4 h-4 text-purple-600 shrink-0" />
+              <span>{sessionNotice}</span>
+            </div>
+          )}
+
           {/* Top Search & Profile Area */}
           <TopHeader
             searchQuery={searchQuery}
@@ -319,6 +620,18 @@ export const LearnSphereLandingPage: React.FC<LearnSphereLandingPageProps> = ({
           onStartLearning={handleStartLearning}
         />
       )}
+
+      {/* Stage 4: Session Behavioral & ML Analysis Modal */}
+      <SessionAnalysisModal
+        isOpen={analysisModalOpen}
+        onClose={() => setAnalysisModalOpen(false)}
+        scenarioType={analyzedScenarioType}
+        sessionId={analyzedSessionId}
+        totalEvents={analyzedEventCount}
+        riskData={analyzedRiskData}
+        explanationData={analyzedExplanationData}
+        onNavigateToMatrix={onNavigateToMatrix}
+      />
     </div>
   );
 };

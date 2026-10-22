@@ -1,14 +1,78 @@
-import React from 'react';
-import { ShieldCheck, Activity, Users, AlertTriangle, CheckCircle2 } from 'lucide-react';
-import { DashboardStats, HealthResponse } from '../types';
+import React, { useState, useEffect } from 'react';
+import {
+  ShieldCheck,
+  Activity,
+  Users,
+  AlertTriangle,
+  CheckCircle2,
+  Search,
+  Cpu,
+  BarChart2,
+  Sparkles,
+  Info,
+  Loader2,
+} from 'lucide-react';
+import {
+  DashboardStats,
+  HealthResponse,
+  RiskResponse,
+  ExplanationResponse,
+} from '../types';
+import { apiClient } from '../services/api';
 
 interface DashboardShellProps {
   stats: DashboardStats | null;
   health: HealthResponse | null;
   loading: boolean;
+  currentSessionId?: string | null;
 }
 
-export const DashboardShell: React.FC<DashboardShellProps> = ({ stats, health, loading: _loading }) => {
+export const DashboardShell: React.FC<DashboardShellProps> = ({
+  stats,
+  health,
+  loading: _loading,
+  currentSessionId,
+}) => {
+  const [inspectSessionId, setInspectSessionId] = useState<string>(currentSessionId || '');
+  const [inspectLoading, setInspectLoading] = useState<boolean>(false);
+  const [inspectError, setInspectError] = useState<string | null>(null);
+  const [riskData, setRiskData] = useState<RiskResponse | null>(null);
+  const [explanationData, setExplanationData] = useState<ExplanationResponse | null>(null);
+
+  // If a currentSessionId is provided and none is selected yet, prefill it
+  useEffect(() => {
+    if (currentSessionId && !inspectSessionId) {
+      setInspectSessionId(currentSessionId);
+    }
+  }, [currentSessionId]);
+
+  const handleInspectSession = async (targetId?: string) => {
+    const sId = (targetId || inspectSessionId).trim();
+    if (!sId) {
+      setInspectError('Please enter or select a valid session ID to inspect.');
+      return;
+    }
+
+    setInspectLoading(true);
+    setInspectError(null);
+
+    try {
+      const [riskRes, explRes] = await Promise.all([
+        apiClient.getRiskScore(sId),
+        apiClient.getExplanation(sId),
+      ]);
+      setRiskData(riskRes);
+      setExplanationData(explRes);
+    } catch (err: any) {
+      console.error('Session inspection failed:', err);
+      setInspectError(err?.message || 'Failed to retrieve session risk and ML explanation.');
+      setRiskData(null);
+      setExplanationData(null);
+    } finally {
+      setInspectLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Top Banner: Research Foundation Overview */}
@@ -20,10 +84,11 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({ stats, health, l
             <span>Research USP: Cross-Layer Behavioral Integrity</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white mb-2">
-            Cross-Layer Behavioral Security Architecture
+            System Matrix &amp; Behavioral Inference Dashboard
           </h1>
           <p className="text-slate-300 text-sm leading-relaxed">
-            Evaluates cross-layer consistency between real-time browser motor dynamics (pointer curves, typing intervals, scroll cadence) and backend API access telemetry to detect botnets, headless automation, and replay fraud.
+            Evaluates cross-layer consistency between browser motor dynamics and backend API telemetry.
+            Infers human vs. automated probability via frozen XGBoost inference with live SHAP explainability.
           </p>
         </div>
       </div>
@@ -95,6 +160,286 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({ stats, health, l
         </div>
       </div>
 
+      {/* STAGE 4: Dedicated Session Telemetry & ML Inference Inspector */}
+      <div className="glass-panel p-6 rounded-xl border border-primary-500/30 bg-surface/90 shadow-xl space-y-5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-4 border-b border-border/80">
+          <div className="flex items-center space-x-3">
+            <div className="p-2.5 rounded-lg bg-primary-500/10 border border-primary-500/30 text-primary-400">
+              <Cpu className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-white tracking-tight flex items-center space-x-2">
+                <span>Session Behavioral Telemetry &amp; ML Inspector</span>
+                <span className="text-[10px] font-mono uppercase bg-primary-500/20 text-primary-300 border border-primary-500/30 px-2 py-0.5 rounded-full">
+                  Stage 4 Verified
+                </span>
+              </h2>
+              <p className="text-xs text-slate-400 font-mono mt-0.5">
+                Inspect real-time telemetry extraction, frozen XGBoost inference, and SHAP feature contributions.
+              </p>
+            </div>
+          </div>
+
+          {/* Session Input & Action */}
+          <div className="flex items-center space-x-2 w-full md:w-auto">
+            <div className="relative flex-1 md:w-72">
+              <input
+                type="text"
+                placeholder="Enter Session ID (sess_...)"
+                value={inspectSessionId}
+                onChange={(e) => setInspectSessionId(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleInspectSession()}
+                className="w-full bg-surface-elevated/70 border border-border/80 rounded-lg px-3.5 py-1.5 text-xs font-mono text-white placeholder-slate-500 focus:outline-none focus:border-primary-500"
+              />
+            </div>
+            <button
+              onClick={() => handleInspectSession()}
+              disabled={inspectLoading || !inspectSessionId.trim()}
+              className="px-4 py-1.5 rounded-lg bg-primary-600 hover:bg-primary-500 disabled:opacity-40 text-white text-xs font-semibold shadow-md transition-all flex items-center space-x-1.5 shrink-0 cursor-pointer"
+            >
+              {inspectLoading ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Inspecting...</span>
+                </>
+              ) : (
+                <>
+                  <Search className="w-3.5 h-3.5" />
+                  <span>Inspect</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Recent Sessions Quick Selector */}
+        {stats?.recent_flagged_sessions && stats.recent_flagged_sessions.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <span className="text-xs font-mono text-slate-400">Recent Sessions:</span>
+            {stats.recent_flagged_sessions.slice(0, 6).map((item) => (
+              <button
+                key={item.session_id}
+                onClick={() => {
+                  setInspectSessionId(item.session_id);
+                  handleInspectSession(item.session_id);
+                }}
+                className={`text-[11px] font-mono px-2.5 py-1 rounded-md border transition-all cursor-pointer flex items-center space-x-1.5 ${
+                  inspectSessionId === item.session_id
+                    ? 'bg-primary-500/20 border-primary-500/50 text-primary-200'
+                    : 'bg-surface-elevated/60 border-border/60 text-slate-300 hover:border-primary-500/40'
+                }`}
+              >
+                <span>{item.session_id.substring(0, 16)}...</span>
+                <span
+                  className={`text-[9px] px-1 py-0.2 rounded font-bold ${
+                    item.decision === 'BLOCK'
+                      ? 'bg-rose-500/20 text-rose-300'
+                      : item.decision === 'CHALLENGE'
+                      ? 'bg-amber-500/20 text-amber-300'
+                      : 'bg-emerald-500/20 text-emerald-300'
+                  }`}
+                >
+                  {item.decision} ({item.risk_score.toFixed(2)})
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Inspection Error */}
+        {inspectError && (
+          <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-300 text-xs flex items-center space-x-2">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>{inspectError}</span>
+          </div>
+        )}
+
+        {/* Inspection Results Display */}
+        {riskData && (
+          <div className="space-y-4 pt-2">
+            {/* Session Metadata vs Actual ML Model Output Comparison */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Left Column: Risk Signals & Decision */}
+              <div className="p-4 rounded-xl bg-surface-elevated/50 border border-border/80 space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-border/60">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center space-x-1.5">
+                    <BarChart2 className="w-3.5 h-3.5 text-cyber-cyan" />
+                    <span>Cross-Layer Risk Signals</span>
+                  </span>
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full text-xs font-mono font-bold ${
+                      riskData.decision.action === 'BLOCK'
+                        ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                        : riskData.decision.action === 'CHALLENGE'
+                        ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                        : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                    }`}
+                  >
+                    Policy: {riskData.decision.action}
+                  </span>
+                </div>
+
+                <div className="space-y-2 text-xs font-mono">
+                  <div className="flex justify-between items-center text-slate-300">
+                    <span>Behavioral Integrity Score:</span>
+                    <span className="text-sm font-bold text-white">
+                      {riskData.behavioral_integrity_score.toFixed(3)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-slate-400">
+                    <span>Browser Motor Anomaly Score:</span>
+                    <span className="text-slate-200">{riskData.signals.browser_score.toFixed(3)}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-slate-400">
+                    <span>API Semantic Anomaly Score:</span>
+                    <span className="text-slate-200">{riskData.signals.api_anomaly_score.toFixed(3)}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-slate-400">
+                    <span>Sequence Transition Anomaly:</span>
+                    <span className="text-slate-200">{riskData.signals.sequence_score.toFixed(3)}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-slate-400">
+                    <span>Cross-Layer Discordance:</span>
+                    <span className="text-cyber-cyan font-bold">{riskData.signals.cross_layer_discordance.toFixed(3)}</span>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-border/50 text-[11px] text-slate-400">
+                  <span className="font-semibold text-slate-300">Primary Justification: </span>
+                  <span>{riskData.decision.reason}</span>
+                </div>
+              </div>
+
+              {/* Right Column: Frozen XGBoost Model Inference Detail */}
+              <div className="p-4 rounded-xl bg-surface-elevated/50 border border-border/80 space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-border/60">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center space-x-1.5">
+                    <Cpu className="w-3.5 h-3.5 text-primary-400" />
+                    <span>Frozen XGBoost Inference</span>
+                  </span>
+                  {riskData.ml_inference && (
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-primary-500/10 text-primary-300 border border-primary-500/20">
+                      {riskData.ml_inference.model_version || 'expA'}
+                    </span>
+                  )}
+                </div>
+
+                {riskData.ml_inference ? (
+                  <div className="space-y-2 text-xs font-mono">
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-400">Predicted Class:</span>
+                      <span
+                        className={`px-2.5 py-0.5 rounded font-bold ${
+                          riskData.ml_inference.predicted_class === 'AUTOMATED'
+                            ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                            : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                        }`}
+                      >
+                        {riskData.ml_inference.predicted_class || 'N/A'} (Label: {riskData.ml_inference.predicted_label ?? '?'})
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center text-slate-300">
+                      <span className="text-slate-400">P(Human):</span>
+                      <span className="text-emerald-400 font-bold">
+                        {riskData.ml_inference.probability_human !== undefined
+                          ? `${(riskData.ml_inference.probability_human * 100).toFixed(1)}%`
+                          : 'N/A'}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center text-slate-300">
+                      <span className="text-slate-400">P(Automated):</span>
+                      <span className="text-rose-400 font-bold">
+                        {riskData.ml_inference.probability_automated !== undefined
+                          ? `${(riskData.ml_inference.probability_automated * 100).toFixed(1)}%`
+                          : 'N/A'}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center text-slate-400">
+                      <span>Decision Threshold:</span>
+                      <span className="text-slate-200">
+                        {riskData.ml_inference.decision_threshold?.toFixed(2) || '0.50'}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center text-slate-400">
+                      <span>Inference Subsystem:</span>
+                      <span className="text-cyber-emerald capitalize">
+                        {riskData.ml_inference.status}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-xs text-slate-400">
+                    No ML inference evaluation available for this session.
+                  </div>
+                )}
+
+                <div className="pt-2 border-t border-border/50 text-[11px] text-slate-400 flex items-start space-x-1.5">
+                  <Info className="w-3.5 h-3.5 text-primary-400 shrink-0 mt-0.5" />
+                  <span>
+                    Note: Predicted class reflects genuine frozen model output (P(Auto) &ge; 0.50), distinguished from operator scenario intentions.
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* SHAP Tree Feature Explainability Breakdown */}
+            {explanationData?.shap_contributions && explanationData.shap_contributions.length > 0 && (
+              <div className="p-4 rounded-xl bg-surface-elevated/40 border border-border/80 space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-border/60">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-200 flex items-center space-x-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-primary-400" />
+                    <span>Top Contributing Behavioral Features (SHAP Tree Values)</span>
+                  </span>
+                  <span className="text-[10px] font-mono text-slate-400">
+                    64 Features Processed
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {explanationData.shap_contributions.map((feat, idx) => {
+                    const isPositive = feat.shap_value >= 0;
+                    return (
+                      <div
+                        key={idx}
+                        className="p-3 rounded-lg bg-surface/80 border border-border/70 flex flex-col justify-between space-y-2"
+                      >
+                        <div className="flex items-start justify-between gap-1">
+                          <span className="text-xs font-bold font-mono text-slate-200 truncate" title={feat.feature_name}>
+                            {feat.feature_name}
+                          </span>
+                          <span
+                            className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
+                              isPositive
+                                ? 'bg-rose-500/20 text-rose-300'
+                                : 'bg-emerald-500/20 text-emerald-300'
+                            }`}
+                          >
+                            {isPositive ? '+' : ''}{feat.shap_value.toFixed(3)}
+                          </span>
+                        </div>
+
+                        <div className="text-[11px] text-slate-400 font-mono">
+                          <span>Value: </span>
+                          <span className="text-slate-200 font-semibold">{feat.feature_value.toFixed(2)}</span>
+                        </div>
+
+                        <p className="text-[10px] text-slate-400 leading-tight">
+                          {feat.description}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Subsystem & Foundation Status */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Architecture Components Card */}
@@ -149,7 +494,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({ stats, health, l
               <span className="text-cyber-cyan font-bold font-mono">03</span>
               <div>
                 <p className="font-medium text-slate-200">Continuous Behavioral Integrity Scoring</p>
-                <p className="text-slate-400 mt-0.5">Continuous risk assessment $[0.0 - 1.0]$ rather than binary human classification.</p>
+                <p className="text-slate-400 mt-0.5">Continuous risk assessment $[0.0 - 1.0]$ with live SHAP explainability rather than binary hard-coded heuristics.</p>
               </div>
             </div>
           </div>

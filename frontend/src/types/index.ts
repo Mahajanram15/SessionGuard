@@ -16,6 +16,18 @@ export interface RiskSignals {
   cross_layer_discordance: number;
 }
 
+export interface ModelInferenceDetail {
+  status: 'available' | 'unavailable' | 'prediction_not_ready' | 'insufficient_telemetry';
+  model_version?: string;
+  model_type?: string;
+  predicted_class?: 'HUMAN' | 'AUTOMATED';
+  predicted_label?: number;
+  probability_automated?: number;
+  probability_human?: number;
+  decision_threshold?: number;
+  explanation_note?: string;
+}
+
 export interface RiskResponse {
   session_id: string;
   behavioral_integrity_score: number;
@@ -26,6 +38,29 @@ export interface RiskResponse {
     enacted_at: string;
   };
   last_evaluated_at: string;
+  ml_inference?: ModelInferenceDetail;
+}
+
+export interface ShapFeatureContribution {
+  feature_name: string;
+  feature_value: number;
+  shap_value: number;
+  description: string;
+}
+
+export interface RuleTrigger {
+  rule_id: string;
+  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  message: string;
+}
+
+export interface ExplanationResponse {
+  session_id: string;
+  behavioral_integrity_score: number;
+  decision: SecurityDecision;
+  shap_contributions: ShapFeatureContribution[];
+  rule_triggers: RuleTrigger[];
+  ml_inference?: ModelInferenceDetail;
 }
 
 export interface DashboardStats {

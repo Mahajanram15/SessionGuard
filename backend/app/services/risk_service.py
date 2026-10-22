@@ -169,17 +169,50 @@ class RiskService:
         total = max(len(sessions), 1)
         active = sum(1 for s in sessions.values() if s.get("status") == "ACTIVE")
 
+        decision_dist = {"ALLOW": 0, "CHALLENGE": 0, "RATE_LIMIT": 0, "BLOCK": 0}
+        total_risk = 0.0
+        flagged: List[FlaggedSessionItem] = []
+
+        for s_id, s in sessions.items():
+            pred = s.get("ml_prediction") or {}
+            prob_auto = float(pred.get("probability_automated", 0.15)) if pred else 0.15
+            total_risk += prob_auto
+
+            if prob_auto >= 0.70:
+                dec = "BLOCK"
+            elif prob_auto >= 0.35:
+                dec = "CHALLENGE"
+            else:
+                dec = "ALLOW"
+            decision_dist[dec] = decision_dist.get(dec, 0) + 1
+
+            ts = s.get("end_time") or s.get("start_time") or datetime.utcnow()
+            if isinstance(ts, str):
+                try:
+                    ts = datetime.fromisoformat(ts)
+                except Exception:
+                    ts = datetime.utcnow()
+
+            pred_class = pred.get("predicted_class", "HUMAN" if s.get("collection_mode") != "AUTOMATED" else "AUTOMATED")
+            flagged.append(
+                FlaggedSessionItem(
+                    session_id=s_id,
+                    risk_score=round(prob_auto, 3),
+                    decision=dec,
+                    primary_reason=f"Model: {pred_class} (P={prob_auto:.3f})" if pred else "Active / Baseline evaluation",
+                    timestamp=ts,
+                )
+            )
+
+        avg_risk = round(total_risk / max(len(sessions), 1), 3)
+        flagged.sort(key=lambda x: x.timestamp, reverse=True)
+
         return DashboardStatsResponse(
             total_sessions=total,
             active_sessions=active,
-            average_risk_score=0.18,
-            decision_distribution={
-                "ALLOW": total,
-                "CHALLENGE": 0,
-                "RATE_LIMIT": 0,
-                "BLOCK": 0,
-            },
-            recent_flagged_sessions=[],
+            average_risk_score=avg_risk if sessions else 0.18,
+            decision_distribution=decision_dist if sessions else {"ALLOW": 1, "CHALLENGE": 0, "RATE_LIMIT": 0, "BLOCK": 0},
+            recent_flagged_sessions=flagged[:10],
         )
 
 risk_service = RiskService()

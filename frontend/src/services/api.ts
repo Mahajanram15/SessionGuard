@@ -2,6 +2,7 @@ import {
   HealthResponse,
   DashboardStats,
   RiskResponse,
+  ExplanationResponse,
   ProductListResponse,
   ProductDetailResponse,
   SearchResponse,
@@ -39,6 +40,18 @@ export const apiClient = {
   async getRiskScore(sessionId: string): Promise<RiskResponse> {
     const res = await fetch(`${API_BASE}/risk/${encodeURIComponent(sessionId)}`);
     if (!res.ok) throw new Error(`Failed to fetch risk score for session ${sessionId}`);
+    return res.json();
+  },
+
+  async getExplanation(sessionId: string): Promise<ExplanationResponse> {
+    const res = await fetch(`${API_BASE}/explanation/${encodeURIComponent(sessionId)}`);
+    if (!res.ok) throw new Error(`Failed to fetch explanation for session ${sessionId}`);
+    return res.json();
+  },
+
+  async getModelStatus(): Promise<Record<string, any>> {
+    const res = await fetch(`${API_BASE}/model/status`);
+    if (!res.ok) throw new Error('Failed to fetch model status');
     return res.json();
   },
 };

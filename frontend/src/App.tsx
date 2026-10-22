@@ -102,7 +102,11 @@ export const App: React.FC = () => {
         <div className="flex-1 w-full">
           <LearnSphereLandingPage
             appClient={appClient}
+            sdk={sdk}
+            stats={sdkStats}
+            onRefreshStats={refreshSdkStats}
             onExploreCatalog={() => setActiveTab('learnsphere')}
+            onNavigateToMatrix={() => setActiveTab('overview')}
           />
         </div>
       ) : (
@@ -114,7 +118,12 @@ export const App: React.FC = () => {
               onRefreshStats={refreshSdkStats}
             />
           ) : (
-            <DashboardShell stats={stats} health={health} loading={loading} />
+            <DashboardShell
+              stats={stats}
+              health={health}
+              loading={loading}
+              currentSessionId={sdkStats.sessionId}
+            />
           )}
         </main>
       )}
