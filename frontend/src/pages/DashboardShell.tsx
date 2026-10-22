@@ -11,6 +11,7 @@ import {
   Sparkles,
   Info,
   Loader2,
+  HelpCircle,
 } from 'lucide-react';
 import {
   DashboardStats,
@@ -255,189 +256,222 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
         )}
 
         {/* Inspection Results Display */}
-        {riskData && (
-          <div className="space-y-4 pt-2">
-            {/* Session Metadata vs Actual ML Model Output Comparison */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Left Column: Risk Signals & Decision */}
-              <div className="p-4 rounded-xl bg-surface-elevated/50 border border-border/80 space-y-3">
-                <div className="flex items-center justify-between pb-2 border-b border-border/60">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center space-x-1.5">
-                    <BarChart2 className="w-3.5 h-3.5 text-cyber-cyan" />
-                    <span>Cross-Layer Risk Signals</span>
-                  </span>
-                  <span
-                    className={`px-2.5 py-0.5 rounded-full text-xs font-mono font-bold ${
-                      riskData.decision.action === 'BLOCK'
-                        ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
-                        : riskData.decision.action === 'CHALLENGE'
-                        ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                        : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                    }`}
-                  >
-                    Policy: {riskData.decision.action}
-                  </span>
-                </div>
+        {riskData && (() => {
+          const nonzeroContribs =
+            explanationData?.shap_contributions?.filter(
+              (feat) => Math.abs(feat.shap_value) >= 0.0001
+            ) || [];
 
-                <div className="space-y-2 text-xs font-mono">
-                  <div className="flex justify-between items-center text-slate-300">
-                    <span>Behavioral Integrity Score:</span>
-                    <span className="text-sm font-bold text-white">
-                      {riskData.behavioral_integrity_score.toFixed(3)}
+          return (
+            <div className="space-y-4 pt-2">
+              {/* STAGE 6 TASK 2: Model Limitation Notice */}
+              <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs space-y-1.5">
+                <div className="flex items-center space-x-2 text-amber-300 font-bold">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
+                  <span className="uppercase tracking-wider">Model Limitation &amp; Demonstration Notice</span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-amber-100/90">
+                  This frozen Experiment A demonstration model relies overwhelmingly on <strong className="font-mono text-white">mouse_event_count</strong> (all 35 decision tree splits trigger at &lt; 72 samples). Short demonstration sessions are classified as automated regardless of other behavioral differences (such as natural velocity variance or typing cadence).
+                </p>
+                <p className="text-[11px] leading-relaxed text-amber-100/80">
+                  The reported probability is a raw model output, not a verified probability that a person is a bot. The model is a pilot demonstration artifact and is not production-ready for operational security enforcement.
+                </p>
+              </div>
+
+              {/* Session Metadata vs Actual ML Model Output Comparison */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Left Column: Risk Signals & Decision */}
+                <div className="p-4 rounded-xl bg-surface-elevated/50 border border-border/80 space-y-3">
+                  <div className="flex items-center justify-between pb-2 border-b border-border/60">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center space-x-1.5">
+                      <BarChart2 className="w-3.5 h-3.5 text-cyber-cyan" />
+                      <span>Cross-Layer Risk Signals</span>
+                    </span>
+                    <span
+                      className={`px-2.5 py-0.5 rounded-full text-xs font-mono font-bold ${
+                        riskData.decision.action === 'BLOCK'
+                          ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                          : riskData.decision.action === 'CHALLENGE'
+                          ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                          : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                      }`}
+                    >
+                      Policy: {riskData.decision.action}
                     </span>
                   </div>
-                  <div className="flex justify-between items-center text-slate-400">
-                    <span>Browser Motor Anomaly Score:</span>
-                    <span className="text-slate-200">{riskData.signals.browser_score.toFixed(3)}</span>
+
+                  <div className="space-y-2 text-xs font-mono">
+                    <div className="flex justify-between items-center text-slate-300">
+                      <span>Behavioral Integrity Score:</span>
+                      <span className="text-sm font-bold text-white">
+                        {riskData.behavioral_integrity_score.toFixed(3)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-slate-400">
+                      <span>Browser Motor Anomaly Score:</span>
+                      <span className="text-slate-200">{riskData.signals.browser_score.toFixed(3)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-slate-400">
+                      <span>API Semantic Anomaly Score:</span>
+                      <span className="text-slate-200">{riskData.signals.api_anomaly_score.toFixed(3)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-slate-400">
+                      <span>Sequence Transition Anomaly:</span>
+                      <span className="text-slate-200">{riskData.signals.sequence_score.toFixed(3)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-slate-400">
+                      <span>Cross-Layer Discordance:</span>
+                      <span className="text-cyber-cyan font-bold">{riskData.signals.cross_layer_discordance.toFixed(3)}</span>
+                    </div>
                   </div>
-                  <div className="flex justify-between items-center text-slate-400">
-                    <span>API Semantic Anomaly Score:</span>
-                    <span className="text-slate-200">{riskData.signals.api_anomaly_score.toFixed(3)}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-slate-400">
-                    <span>Sequence Transition Anomaly:</span>
-                    <span className="text-slate-200">{riskData.signals.sequence_score.toFixed(3)}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-slate-400">
-                    <span>Cross-Layer Discordance:</span>
-                    <span className="text-cyber-cyan font-bold">{riskData.signals.cross_layer_discordance.toFixed(3)}</span>
+
+                  <div className="pt-2 border-t border-border/50 text-[11px] text-slate-400">
+                    <span className="font-semibold text-slate-300">Score Meaning: </span>
+                    <span>Consolidated multi-signal heuristic risk index [0.0 - 1.0]. Distinct from ML posterior probabilities.</span>
                   </div>
                 </div>
 
-                <div className="pt-2 border-t border-border/50 text-[11px] text-slate-400">
-                  <span className="font-semibold text-slate-300">Primary Justification: </span>
-                  <span>{riskData.decision.reason}</span>
+                {/* Right Column: Frozen XGBoost Model Inference Detail */}
+                <div className="p-4 rounded-xl bg-surface-elevated/50 border border-border/80 space-y-3">
+                  <div className="flex items-center justify-between pb-2 border-b border-border/60">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center space-x-1.5">
+                      <Cpu className="w-3.5 h-3.5 text-primary-400" />
+                      <span>Frozen XGBoost Inference</span>
+                    </span>
+                    {riskData.ml_inference && (
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-primary-500/10 text-primary-300 border border-primary-500/20">
+                        {riskData.ml_inference.model_version || 'expA'}
+                      </span>
+                    )}
+                  </div>
+
+                  {riskData.ml_inference ? (
+                    <div className="space-y-2 text-xs font-mono">
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-400">Predicted Class:</span>
+                        <span
+                          className={`px-2.5 py-0.5 rounded font-bold ${
+                            riskData.ml_inference.predicted_class === 'AUTOMATED'
+                              ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                              : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                          }`}
+                        >
+                          {riskData.ml_inference.predicted_class || 'N/A'} (Label: {riskData.ml_inference.predicted_label ?? '?'})
+                        </span>
+                      </div>
+
+                      <div className="flex justify-between items-center text-slate-300">
+                        <span className="text-slate-400">P(Human):</span>
+                        <span className="text-emerald-400 font-bold">
+                          {riskData.ml_inference.probability_human !== undefined
+                            ? `${(riskData.ml_inference.probability_human * 100).toFixed(1)}%`
+                            : 'N/A'}
+                        </span>
+                      </div>
+
+                      <div className="flex justify-between items-center text-slate-300">
+                        <span className="text-slate-400">P(Automated):</span>
+                        <span className="text-rose-400 font-bold">
+                          {riskData.ml_inference.probability_automated !== undefined
+                            ? `${(riskData.ml_inference.probability_automated * 100).toFixed(1)}%`
+                            : 'N/A'}
+                        </span>
+                      </div>
+
+                      <div className="flex justify-between items-center text-slate-400">
+                        <span>Decision Threshold:</span>
+                        <span className="text-slate-200">
+                          {riskData.ml_inference.decision_threshold?.toFixed(2) || '0.50'}
+                        </span>
+                      </div>
+
+                      <div className="flex justify-between items-center text-slate-400">
+                        <span>Inference Subsystem:</span>
+                        <span className="text-cyber-emerald capitalize">
+                          {riskData.ml_inference.status}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-slate-400 py-3 text-center">
+                      No ML inference evaluation available for this session.
+                    </div>
+                  )}
+
+                  <div className="pt-2 border-t border-border/50 text-[11px] text-slate-400 flex items-start space-x-1.5">
+                    <Info className="w-3.5 h-3.5 text-primary-400 shrink-0 mt-0.5" />
+                    <span>
+                      <strong>Distinction:</strong> Predicted class is computed strictly from the 64-feature vector. It is reported separately from the intended test scenario.
+                    </span>
+                  </div>
                 </div>
               </div>
 
-              {/* Right Column: Frozen XGBoost Model Inference Detail */}
-              <div className="p-4 rounded-xl bg-surface-elevated/50 border border-border/80 space-y-3">
-                <div className="flex items-center justify-between pb-2 border-b border-border/60">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center space-x-1.5">
-                    <Cpu className="w-3.5 h-3.5 text-primary-400" />
-                    <span>Frozen XGBoost Inference</span>
-                  </span>
-                  {riskData.ml_inference && (
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-primary-500/10 text-primary-300 border border-primary-500/20">
-                      {riskData.ml_inference.model_version || 'expA'}
+              {/* STAGE 6 TASK 3: Truthful SHAP Tree Feature Explainability Breakdown */}
+              <div className="p-4 rounded-xl bg-surface-elevated/40 border border-border/80 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-border/60 gap-1">
+                  <div>
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-200 flex items-center space-x-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-primary-400" />
+                      <span>Contributing Behavioral Features (Non-Zero SHAP Values)</span>
                     </span>
-                  )}
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      SHAP values represent tree-split contributions to the model&apos;s log-odds score, not causal proof of user identity or intent.
+                    </p>
+                  </div>
+                  <span className="text-[10px] font-mono text-slate-400 shrink-0">
+                    Non-Zero Contributors: {nonzeroContribs.length}
+                  </span>
                 </div>
 
-                {riskData.ml_inference ? (
-                  <div className="space-y-2 text-xs font-mono">
-                    <div className="flex justify-between items-center">
-                      <span className="text-slate-400">Predicted Class:</span>
-                      <span
-                        className={`px-2.5 py-0.5 rounded font-bold ${
-                          riskData.ml_inference.predicted_class === 'AUTOMATED'
-                            ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
-                            : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                        }`}
-                      >
-                        {riskData.ml_inference.predicted_class || 'N/A'} (Label: {riskData.ml_inference.predicted_label ?? '?'})
-                      </span>
-                    </div>
+                {nonzeroContribs.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {nonzeroContribs.map((feat, idx) => {
+                      const isPositive = feat.shap_value >= 0;
+                      return (
+                        <div
+                          key={idx}
+                          className="p-3 rounded-lg bg-surface/80 border border-border/70 flex flex-col justify-between space-y-2"
+                        >
+                          <div className="flex items-start justify-between gap-1">
+                            <span className="text-xs font-bold font-mono text-slate-200 truncate" title={feat.feature_name}>
+                              {feat.feature_name}
+                            </span>
+                            <span
+                              className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
+                                isPositive
+                                  ? 'bg-rose-500/20 text-rose-300'
+                                  : 'bg-emerald-500/20 text-emerald-300'
+                              }`}
+                            >
+                              {isPositive ? '+' : ''}{feat.shap_value.toFixed(3)}
+                            </span>
+                          </div>
 
-                    <div className="flex justify-between items-center text-slate-300">
-                      <span className="text-slate-400">P(Human):</span>
-                      <span className="text-emerald-400 font-bold">
-                        {riskData.ml_inference.probability_human !== undefined
-                          ? `${(riskData.ml_inference.probability_human * 100).toFixed(1)}%`
-                          : 'N/A'}
-                      </span>
-                    </div>
+                          <div className="text-[11px] text-slate-400 font-mono">
+                            <span>Value: </span>
+                            <span className="text-slate-200 font-semibold">{feat.feature_value.toFixed(2)}</span>
+                          </div>
 
-                    <div className="flex justify-between items-center text-slate-300">
-                      <span className="text-slate-400">P(Automated):</span>
-                      <span className="text-rose-400 font-bold">
-                        {riskData.ml_inference.probability_automated !== undefined
-                          ? `${(riskData.ml_inference.probability_automated * 100).toFixed(1)}%`
-                          : 'N/A'}
-                      </span>
-                    </div>
-
-                    <div className="flex justify-between items-center text-slate-400">
-                      <span>Decision Threshold:</span>
-                      <span className="text-slate-200">
-                        {riskData.ml_inference.decision_threshold?.toFixed(2) || '0.50'}
-                      </span>
-                    </div>
-
-                    <div className="flex justify-between items-center text-slate-400">
-                      <span>Inference Subsystem:</span>
-                      <span className="text-cyber-emerald capitalize">
-                        {riskData.ml_inference.status}
-                      </span>
-                    </div>
+                          <p className="text-[10px] text-slate-400 leading-tight">
+                            {feat.description}
+                          </p>
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : (
-                  <div className="text-xs text-slate-400">
-                    No ML inference evaluation available for this session.
+                  <div className="p-3.5 rounded-lg bg-surface/60 border border-border/50 text-slate-400 text-xs flex items-center space-x-2">
+                    <HelpCircle className="w-4 h-4 text-slate-500 shrink-0" />
+                    <span>
+                      No individual behavioral feature exerted a non-zero attribution on this prediction. The model traversed default tree leaves, or explanation telemetry is unavailable for this session.
+                    </span>
                   </div>
                 )}
-
-                <div className="pt-2 border-t border-border/50 text-[11px] text-slate-400 flex items-start space-x-1.5">
-                  <Info className="w-3.5 h-3.5 text-primary-400 shrink-0 mt-0.5" />
-                  <span>
-                    Note: Predicted class reflects genuine frozen model output (P(Auto) &ge; 0.50), distinguished from operator scenario intentions.
-                  </span>
-                </div>
               </div>
             </div>
-
-            {/* SHAP Tree Feature Explainability Breakdown */}
-            {explanationData?.shap_contributions && explanationData.shap_contributions.length > 0 && (
-              <div className="p-4 rounded-xl bg-surface-elevated/40 border border-border/80 space-y-3">
-                <div className="flex items-center justify-between pb-2 border-b border-border/60">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-200 flex items-center space-x-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-primary-400" />
-                    <span>Top Contributing Behavioral Features (SHAP Tree Values)</span>
-                  </span>
-                  <span className="text-[10px] font-mono text-slate-400">
-                    64 Features Processed
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {explanationData.shap_contributions.map((feat, idx) => {
-                    const isPositive = feat.shap_value >= 0;
-                    return (
-                      <div
-                        key={idx}
-                        className="p-3 rounded-lg bg-surface/80 border border-border/70 flex flex-col justify-between space-y-2"
-                      >
-                        <div className="flex items-start justify-between gap-1">
-                          <span className="text-xs font-bold font-mono text-slate-200 truncate" title={feat.feature_name}>
-                            {feat.feature_name}
-                          </span>
-                          <span
-                            className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
-                              isPositive
-                                ? 'bg-rose-500/20 text-rose-300'
-                                : 'bg-emerald-500/20 text-emerald-300'
-                            }`}
-                          >
-                            {isPositive ? '+' : ''}{feat.shap_value.toFixed(3)}
-                          </span>
-                        </div>
-
-                        <div className="text-[11px] text-slate-400 font-mono">
-                          <span>Value: </span>
-                          <span className="text-slate-200 font-semibold">{feat.feature_value.toFixed(2)}</span>
-                        </div>
-
-                        <p className="text-[10px] text-slate-400 leading-tight">
-                          {feat.description}
-                        </p>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+          );
+        })()}
       </div>
 
       {/* Subsystem & Foundation Status */}

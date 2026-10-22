@@ -122,28 +122,8 @@ class RiskService:
                     )
                 )
 
-        if not shap_contributions:
-            # Fallback baseline foundation explanation if no telemetry features exist
-            shap_contributions = [
-                ShapFeatureContribution(
-                    feature_name="mouse_velocity_std",
-                    feature_value=12.4,
-                    shap_value=0.08,
-                    description="Natural variance in cursor trajectory velocity."
-                ),
-                ShapFeatureContribution(
-                    feature_name="inter_key_interval_mean_ms",
-                    feature_value=135.2,
-                    shap_value=0.04,
-                    description="Organic keyboard flight-time cadence."
-                ),
-                ShapFeatureContribution(
-                    feature_name="cross_layer_discordance",
-                    feature_value=risk.signals.cross_layer_discordance,
-                    shap_value=0.02,
-                    description="Coherence between user interaction events and backend API dispatches."
-                ),
-            ]
+        # Task 3: If SHAP data is unavailable or has no non-zero feature attributions,
+        # return empty list rather than inventing fabricated fallback features.
 
         rules = []
         if risk.behavioral_integrity_score >= 0.35:

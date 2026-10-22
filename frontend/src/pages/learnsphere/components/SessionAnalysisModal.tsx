@@ -4,12 +4,12 @@ import {
   ShieldCheck,
   Cpu,
   BarChart2,
-  Sparkles,
   ExternalLink,
   CheckCircle2,
   Bot,
   User,
-  Info,
+  AlertTriangle,
+  HelpCircle,
 } from 'lucide-react';
 import { RiskResponse, ExplanationResponse } from '../../../types';
 
@@ -41,6 +41,12 @@ export const SessionAnalysisModal: React.FC<SessionAnalysisModalProps> = ({
   const probAuto = ml?.probability_automated !== undefined ? ml.probability_automated : null;
   const probHuman = ml?.probability_human !== undefined ? ml.probability_human : null;
 
+  // Genuine non-zero SHAP contributors only (Task 3)
+  const nonzeroContributions =
+    explanationData?.shap_contributions?.filter(
+      (feat) => Math.abs(feat.shap_value) >= 0.0001
+    ) || [];
+
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150">
       <div className="bg-white rounded-[28px] max-w-3xl w-full border border-slate-100 shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
@@ -53,7 +59,7 @@ export const SessionAnalysisModal: React.FC<SessionAnalysisModalProps> = ({
             <div>
               <div className="flex items-center space-x-2 mb-1">
                 <span className="px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-800 text-xs font-bold font-mono">
-                  Stage 4 Verified
+                  Stage 6 Demo Integrity
                 </span>
                 <span className="text-xs text-slate-400">•</span>
                 <span className="text-xs text-slate-600 font-mono font-medium truncate max-w-[200px] sm:max-w-xs">
@@ -75,30 +81,106 @@ export const SessionAnalysisModal: React.FC<SessionAnalysisModalProps> = ({
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 overflow-y-auto flex-1 space-y-6">
-          {/* Readiness & Execution Pipeline Status */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex flex-col">
-              <span className="text-[10px] text-slate-400 font-semibold uppercase">Intended Scenario</span>
-              <span className="text-xs font-bold text-slate-800 mt-1 flex items-center space-x-1">
+        <div className="p-6 overflow-y-auto flex-1 space-y-5">
+          {/* STAGE 6 TASK 2: Clear Model Limitation Notice */}
+          <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-900 space-y-2">
+            <div className="flex items-center space-x-2 text-amber-800 font-bold text-xs uppercase tracking-wider">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>Model Limitation &amp; Demonstration Notice</span>
+            </div>
+            <p className="text-xs leading-relaxed text-amber-900">
+              This frozen Experiment A demonstration model relies overwhelmingly on{' '}
+              <strong className="font-mono font-bold">mouse_event_count</strong> (all 35 decision tree splits trigger at &lt; 72 samples). Short demonstration sessions are classified as automated regardless of other behavioral differences (such as natural velocity variance or typing cadence).
+            </p>
+            <p className="text-[11px] leading-relaxed text-amber-800/90">
+              The reported probability is a raw model output, not a verified probability that a person is a bot. The model is a pilot artifact and is not production-ready for operational security enforcement without broader, independently validated data.
+            </p>
+          </div>
+
+          {/* STAGE 6 TASK 4: Separate Intended Scenario from Model Prediction */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            {/* Operator Scenario Context Card */}
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 flex flex-col justify-between space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                  1. Demo Execution Scenario
+                </span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-200/70 text-slate-700 font-semibold">
+                  Test Parameter
+                </span>
+              </div>
+              <div className="flex items-center space-x-2">
                 {scenarioType === 'manual' ? (
                   <>
-                    <User className="w-3.5 h-3.5 text-purple-600" />
-                    <span>Manual Operator</span>
+                    <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
+                      <User className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-bold text-slate-900">Manual Operator</div>
+                      <div className="text-[11px] text-slate-500">Interactive LearnSphere browsing &amp; quizzes</div>
+                    </div>
                   </>
                 ) : (
                   <>
-                    <Bot className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>Synthetic Bot</span>
+                    <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+                      <Bot className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-bold text-slate-900">Synthetic Bot Automation</div>
+                      <div className="text-[11px] text-slate-500">Deterministic linear trajectory script</div>
+                    </div>
                   </>
                 )}
-              </span>
+              </div>
+              <p className="text-[10px] text-slate-500 pt-1 border-t border-slate-200/60 leading-tight">
+                <strong>Scenario Context:</strong> Describes how the operator ran this local test session. It is not the model&apos;s conclusion and is not passed to the inference engine.
+              </p>
             </div>
 
+            {/* Model Prediction Output Card */}
+            <div className="p-4 rounded-2xl bg-slate-900 text-white flex flex-col justify-between space-y-2 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                  2. Frozen Model Output
+                </span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-slate-300 font-mono">
+                  Threshold: {ml?.decision_threshold?.toFixed(2) || '0.50'}
+                </span>
+              </div>
+              <div className="flex items-center space-x-2.5">
+                <span
+                  className={`px-3 py-1 rounded-xl text-sm font-extrabold font-mono shadow-sm ${
+                    isAutomatedPredicted
+                      ? 'bg-rose-500/30 text-rose-300 border border-rose-500/50'
+                      : 'bg-emerald-500/30 text-emerald-300 border border-emerald-500/50'
+                  }`}
+                >
+                  {ml?.predicted_class || 'UNKNOWN'}
+                </span>
+                <div className="text-xs font-mono text-slate-300">
+                  <span>P(Auto): </span>
+                  <span className="font-bold text-rose-400">
+                    {probAuto !== null ? `${(probAuto * 100).toFixed(1)}%` : 'N/A'}
+                  </span>
+                  <span className="mx-1.5 text-slate-500">|</span>
+                  <span>P(Human): </span>
+                  <span className="font-bold text-emerald-400">
+                    {probHuman !== null ? `${(probHuman * 100).toFixed(1)}%` : 'N/A'}
+                  </span>
+                </div>
+              </div>
+              <p className="text-[10px] text-slate-400 pt-1 border-t border-white/10 leading-tight">
+                <strong>Independent Output:</strong> Computed strictly on the 64-feature vector. It is not inferred from or linked to the test scenario metadata.
+              </p>
+            </div>
+          </div>
+
+          {/* Telemetry & Pipeline Readiness Metrics */}
+          <div className="grid grid-cols-3 gap-3">
             <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex flex-col">
-              <span className="text-[10px] text-slate-400 font-semibold uppercase">Events Captured</span>
+              <span className="text-[10px] text-slate-400 font-semibold uppercase">Events Accepted</span>
               <span className="text-xs font-bold text-slate-800 mt-1 font-mono">
-                {totalEvents} Events Accepted
+                {totalEvents} Telemetry Events
               </span>
             </div>
 
@@ -111,122 +193,67 @@ export const SessionAnalysisModal: React.FC<SessionAnalysisModalProps> = ({
             </div>
 
             <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex flex-col">
-              <span className="text-[10px] text-slate-400 font-semibold uppercase">Frozen Model</span>
+              <span className="text-[10px] text-slate-400 font-semibold uppercase">Model Version</span>
               <span className="text-xs font-bold text-slate-800 mt-1 font-mono truncate">
                 {ml?.model_version || 'expA (XGBoost)'}
               </span>
             </div>
           </div>
 
-          {/* Genuine ML Prediction Card */}
-          <div className="p-5 rounded-2xl bg-gradient-to-br from-slate-900 via-indigo-950 to-purple-950 text-white shadow-lg space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-white/10">
-              <div className="flex items-center space-x-2">
-                <Sparkles className="w-4 h-4 text-purple-400" />
-                <h3 className="text-sm font-bold tracking-tight">
-                  Frozen XGBoost Model Inference Output
-                </h3>
-              </div>
-              <span className="text-[10px] font-mono uppercase px-2.5 py-0.5 rounded-full bg-white/10 text-purple-200 border border-white/15">
-                Decision Threshold: {ml?.decision_threshold?.toFixed(2) || '0.50'}
+          {/* STAGE 6 TASK 5: Multi-Signal Risk Score Explanation */}
+          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-center justify-between">
+            <div className="space-y-0.5">
+              <span className="text-xs font-bold text-slate-800 flex items-center space-x-1.5">
+                <span>Behavioral Integrity Score: </span>
+                <span className="font-mono text-purple-700">
+                  {riskData?.behavioral_integrity_score.toFixed(3) || '0.000'}
+                </span>
               </span>
+              <p className="text-[11px] text-slate-500">
+                Consolidated heuristic multi-signal risk index [0.0 - 1.0]. Distinct from ML posterior probabilities.
+              </p>
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
-              {/* Predicted Class */}
-              <div className="flex flex-col space-y-1">
-                <span className="text-xs text-slate-400 uppercase tracking-wider font-semibold">
-                  Predicted Class
-                </span>
-                <div className="flex items-center space-x-2">
-                  <span
-                    className={`px-3 py-1 rounded-xl text-sm font-extrabold font-mono shadow-sm ${
-                      isAutomatedPredicted
-                        ? 'bg-rose-500/30 text-rose-300 border border-rose-500/50'
-                        : 'bg-emerald-500/30 text-emerald-300 border border-emerald-500/50'
-                    }`}
-                  >
-                    {ml?.predicted_class || 'UNKNOWN'}
-                  </span>
-                  <span className="text-xs text-slate-400 font-mono">
-                    (Label: {ml?.predicted_label ?? '?'})
-                  </span>
-                </div>
-              </div>
-
-              {/* Probabilities */}
-              <div className="flex flex-col space-y-1 sm:border-l sm:border-white/10 sm:pl-4">
-                <span className="text-xs text-slate-400 uppercase tracking-wider font-semibold">
-                  Posterior Probabilities
-                </span>
-                <div className="space-y-0.5 font-mono text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-slate-300">P(Human):</span>
-                    <span className="font-bold text-emerald-400">
-                      {probHuman !== null ? `${(probHuman * 100).toFixed(1)}%` : 'N/A'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-300">P(Automated):</span>
-                    <span className="font-bold text-rose-400">
-                      {probAuto !== null ? `${(probAuto * 100).toFixed(1)}%` : 'N/A'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Policy Decision */}
-              <div className="flex flex-col space-y-1 sm:border-l sm:border-white/10 sm:pl-4">
-                <span className="text-xs text-slate-400 uppercase tracking-wider font-semibold">
-                  Consolidated Policy
-                </span>
-                <div className="flex items-center space-x-2">
-                  <span
-                    className={`px-2.5 py-0.5 rounded-lg text-xs font-bold font-mono ${
-                      riskData?.decision.action === 'BLOCK'
-                        ? 'bg-rose-500 text-white'
-                        : riskData?.decision.action === 'CHALLENGE'
-                        ? 'bg-amber-500 text-slate-950'
-                        : 'bg-emerald-500 text-white'
-                    }`}
-                  >
-                    {riskData?.decision.action || 'ALLOW'}
-                  </span>
-                  <span className="text-xs font-mono text-slate-300">
-                    Risk: {riskData?.behavioral_integrity_score.toFixed(3) || '0.00'}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="pt-2 border-t border-white/10 flex items-start space-x-2 text-[11px] text-slate-300">
-              <Info className="w-3.5 h-3.5 text-purple-400 shrink-0 mt-0.5" />
-              <span>
-                <strong>Distinction Note:</strong> The predicted class reflects genuine model classification on the 64-feature vector. It is reported independently of the operator's intended scenario.
+            <div className="flex items-center space-x-2 shrink-0">
+              <span className="text-xs font-semibold text-slate-600">Policy Action:</span>
+              <span
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold font-mono ${
+                  riskData?.decision.action === 'BLOCK'
+                    ? 'bg-rose-500 text-white'
+                    : riskData?.decision.action === 'CHALLENGE'
+                    ? 'bg-amber-500 text-slate-950'
+                    : 'bg-emerald-500 text-white'
+                }`}
+              >
+                {riskData?.decision.action || 'ALLOW'}
               </span>
             </div>
           </div>
 
-          {/* Contributing SHAP Features */}
-          {explanationData?.shap_contributions && explanationData.shap_contributions.length > 0 && (
-            <div className="space-y-2.5">
-              <div className="flex items-center justify-between">
+          {/* STAGE 6 TASK 3: Truthful SHAP Explanations */}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
                 <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center space-x-1.5">
                   <BarChart2 className="w-4 h-4 text-purple-600" />
-                  <span>Top Contributing SHAP Features</span>
+                  <span>Genuine Non-Zero Contributing Features</span>
                 </h4>
-                <span className="text-[11px] text-slate-400 font-mono">
-                  Tree SHAP Contributions
-                </span>
+                <p className="text-[10px] text-slate-500">
+                  SHAP values represent tree-split contributions to the model&apos;s log-odds score, not causal proof of user identity or intent.
+                </p>
               </div>
+              <span className="text-[10px] text-slate-400 font-mono shrink-0">
+                Non-Zero: {nonzeroContributions.length}
+              </span>
+            </div>
 
+            {nonzeroContributions.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                {explanationData.shap_contributions.map((feat, idx) => {
+                {nonzeroContributions.map((feat, idx) => {
                   const isPositive = feat.shap_value >= 0;
                   return (
                     <div
                       key={idx}
-                      className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex flex-col justify-between space-y-1.5"
+                      className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex flex-col justify-between space-y-1.5"
                     >
                       <div className="flex items-start justify-between gap-1">
                         <span className="text-xs font-bold font-mono text-slate-800 truncate" title={feat.feature_name}>
@@ -243,9 +270,9 @@ export const SessionAnalysisModal: React.FC<SessionAnalysisModalProps> = ({
                         </span>
                       </div>
 
-                      <div className="text-[11px] text-slate-500 font-mono">
+                      <div className="text-[11px] text-slate-600 font-mono">
                         <span>Value: </span>
-                        <span className="text-slate-800 font-bold">{feat.feature_value.toFixed(2)}</span>
+                        <span className="text-slate-900 font-bold">{feat.feature_value.toFixed(2)}</span>
                       </div>
 
                       <p className="text-[10px] text-slate-500 leading-tight">
@@ -255,8 +282,15 @@ export const SessionAnalysisModal: React.FC<SessionAnalysisModalProps> = ({
                   );
                 })}
               </div>
-            </div>
-          )}
+            ) : (
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/70 text-slate-500 text-xs flex items-center space-x-2">
+                <HelpCircle className="w-4 h-4 text-slate-400 shrink-0" />
+                <span>
+                  No individual behavioral feature exerted a non-zero SHAP attribution on this prediction. The model traversed default tree leaves, or explanation telemetry is unavailable.
+                </span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Modal Footer */}

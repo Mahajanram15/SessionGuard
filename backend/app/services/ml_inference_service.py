@@ -274,11 +274,12 @@ class MLInferenceService:
             }
 
     def explain_from_features(
-        self, features_dict: Dict[str, Any], top_k: int = 5
+        self, features_dict: Dict[str, Any], top_k: int = 5, nonzero_only: bool = True
     ) -> List[Dict[str, Any]]:
         """
         Computes mathematically exact tree SHAP values for the 64 features using
-        XGBoost's native pred_contribs interface and returns the top feature drivers.
+        XGBoost's native pred_contribs interface and returns genuine feature drivers.
+        When nonzero_only is True, skips features with 0.0 contribution.
         """
         if not self._is_ready or self._model is None:
             return []
@@ -297,13 +298,16 @@ class MLInferenceService:
             feat_contribs = contribs[:-1]  # discard bias intercept
 
             # Rank by absolute magnitude of contribution
-            ranked_indices = np.argsort(np.abs(feat_contribs))[::-1][:top_k]
+            ranked_indices = np.argsort(np.abs(feat_contribs))[::-1]
 
             explanations: List[Dict[str, Any]] = []
             for idx in ranked_indices:
+                shap_val = float(feat_contribs[idx])
+                if nonzero_only and abs(shap_val) < 1e-4:
+                    continue
+
                 feat_name = self._ordered_features[idx]
                 feat_val = row[idx]
-                shap_val = float(feat_contribs[idx])
                 desc = FEATURE_DESCRIPTIONS.get(
                     feat_name, f"Behavioral dynamic metric: {feat_name}"
                 )
@@ -314,6 +318,8 @@ class MLInferenceService:
                     "shap_value": round(shap_val, 4),
                     "description": desc,
                 })
+                if len(explanations) >= top_k:
+                    break
 
             return explanations
         except Exception:

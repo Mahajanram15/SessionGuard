@@ -94,16 +94,21 @@ class TestMLInferenceIntegration(unittest.TestCase):
         self.assertEqual(res_inf["status"], "schema_error")
 
     def test_shap_explanation_extraction(self):
-        """Verify live SHAP tree contribution extraction."""
+        """Verify live SHAP tree contribution extraction and genuine non-zero contributor filtering."""
         row0 = self.features_df.iloc[0].to_dict()
         exps = ml_inference_service.explain_from_features(row0, top_k=5)
-        self.assertEqual(len(exps), 5)
+        self.assertGreaterEqual(len(exps), 1)
         for item in exps:
             self.assertIn("feature_name", item)
             self.assertIn("feature_value", item)
             self.assertIn("shap_value", item)
             self.assertIn("description", item)
             self.assertIsInstance(item["shap_value"], float)
+            self.assertGreater(abs(item["shap_value"]), 0.0)
+
+        # When nonzero_only=False, it returns up to top_k padded
+        exps_all = ml_inference_service.explain_from_features(row0, top_k=5, nonzero_only=False)
+        self.assertEqual(len(exps_all), 5)
 
     def test_api_model_status_endpoint(self):
         """Verify GET /api/model/status endpoint."""
