@@ -22,6 +22,8 @@ class SessionService:
         self._events_by_session: Dict[str, List[Dict[str, Any]]] = {}
         self._api_requests: Dict[str, List[Dict[str, Any]]] = {}
         self._api_requests_count: Dict[str, int] = {}
+        self._features_by_session: Dict[str, Dict[str, float]] = {}
+        self._predictions_by_session: Dict[str, Dict[str, Any]] = {}
         self._global_request_id: int = 0
         self._load_cache()
 
@@ -363,12 +365,47 @@ class SessionService:
 
         # Trigger feature extraction and persistence
         events = self._events_by_session.get(session_id, [])
+        feature_vector: Optional[Dict[str, float]] = None
+        ml_inference_detail = None
+        integrity_score = 0.15
+
         if events:
             try:
                 from backend.app.services.feature_engineering import feature_engineering_service
-                await feature_engineering_service.compute_and_save_features(session_id, events, db=db)
+                feature_vector = await feature_engineering_service.compute_and_save_features(session_id, events, db=db)
+                if feature_vector:
+                    self._features_by_session[session_id] = feature_vector
             except Exception as e:
                 print(f"[SessionService Feature Warning] Extraction error: {e}")
+
+        # Trigger genuine ML model inference if features are available and session has events
+        if feature_vector and len(events) >= 5:
+            try:
+                from backend.app.services.ml_inference_service import ml_inference_service
+                from backend.app.schemas.risk import ModelInferenceDetail
+
+                pred_res = ml_inference_service.predict_from_feature_dict(feature_vector)
+                if pred_res.get("status") == "success":
+                    self._predictions_by_session[session_id] = pred_res
+                    session = self._sessions.get(session_id)
+                    if session:
+                        session["ml_prediction"] = pred_res
+                    ml_inference_detail = ModelInferenceDetail(
+                        status="available",
+                        model_version=pred_res.get("model_version"),
+                        model_type=pred_res.get("model_type"),
+                        predicted_class=pred_res.get("predicted_class"),
+                        predicted_label=pred_res.get("predicted_label"),
+                        probability_automated=pred_res.get("probability_automated"),
+                        probability_human=pred_res.get("probability_human"),
+                        decision_threshold=pred_res.get("decision_threshold", 0.50),
+                        explanation_note=pred_res.get("demonstration_note"),
+                    )
+                    # Align integrity score with model automated probability
+                    prob_auto = pred_res.get("probability_automated", 0.15)
+                    integrity_score = round(float(prob_auto), 3)
+            except Exception as e:
+                print(f"[SessionService ML Warning] Inference error: {e}")
 
         if db is not None:
             try:
@@ -391,11 +428,52 @@ class SessionService:
             status="COMPLETED",
             duration_seconds=round(duration, 2),
             total_events_captured=events_count,
-            final_integrity_score=0.15,
+            final_integrity_score=integrity_score,
+            ml_inference=ml_inference_detail,
         )
 
     def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
         return self._sessions.get(session_id)
+
+    def get_session_features(self, session_id: str) -> Optional[Dict[str, float]]:
+        """Returns cached features or computes on-the-fly from recorded events."""
+        if session_id in self._features_by_session:
+            return self._features_by_session[session_id]
+        events = self._events_by_session.get(session_id, [])
+        if events:
+            try:
+                from backend.app.services.feature_engineering import feature_engineering_service
+                feat = feature_engineering_service.extract_features(events)
+                if feat:
+                    self._features_by_session[session_id] = feat
+                    return feat
+            except Exception as e:
+                print(f"[SessionService Feature Warning] Dynamic extraction error: {e}")
+        return None
+
+    def get_session_prediction(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """Returns cached ML prediction or triggers on-demand inference if features exist."""
+        if session_id in self._predictions_by_session:
+            return self._predictions_by_session[session_id]
+        session = self._sessions.get(session_id)
+        if session and "ml_prediction" in session:
+            return session["ml_prediction"]
+
+        features = self.get_session_features(session_id)
+        events = self._events_by_session.get(session_id, [])
+        if features and len(events) >= 5:
+            try:
+                from backend.app.services.ml_inference_service import ml_inference_service
+                if ml_inference_service.is_ready:
+                    pred = ml_inference_service.predict_from_feature_dict(features)
+                    if pred.get("status") == "success":
+                        self._predictions_by_session[session_id] = pred
+                        if session:
+                            session["ml_prediction"] = pred
+                        return pred
+            except Exception as e:
+                print(f"[SessionService ML Warning] Dynamic inference error: {e}")
+        return None
 
     def get_all_sessions(self) -> Dict[str, Dict[str, Any]]:
         return self._sessions

@@ -1,0 +1,166 @@
+{
+  "manifest_type": "CrossTrace Experiment A Frozen Model Manifest",
+  "model_metadata": {
+    "model_type": "xgboost.XGBClassifier",
+    "model_library": "xgboost",
+    "model_version": "3.4.1",
+    "serialization_format": "joblib",
+    "created_at_utc": "2026-10-22T04:03:21.559771+00:00",
+    "status": "FROZEN_DEMONSTRATION_MODEL",
+    "random_state": 42,
+    "hyperparameters": {
+      "n_estimators": 50,
+      "max_depth": 3,
+      "learning_rate": 0.1,
+      "eval_metric": "logloss"
+    }
+  },
+  "training_dataset": {
+    "path": "ml/data/features.csv",
+    "dataset_sha256": "7164c4432bfc1d0e93be0e183639faa67215e5bb5a2ee6f05565be85b668319c",
+    "total_sessions": 53,
+    "human_sessions": 23,
+    "automated_sessions": 30,
+    "partition": "phase1_baseline_development"
+  },
+  "feature_configuration": {
+    "feature_count": 64,
+    "ordered_features": [
+      "mouse_event_count",
+      "mouse_total_distance_px",
+      "mouse_mean_velocity",
+      "mouse_std_velocity",
+      "mouse_max_velocity",
+      "mouse_mean_acceleration",
+      "mouse_std_acceleration",
+      "mouse_max_acceleration",
+      "mouse_direction_change_count",
+      "mouse_direction_change_rate",
+      "mouse_mean_direction_change",
+      "mouse_pause_count",
+      "mouse_mean_pause_ms",
+      "mouse_max_pause_ms",
+      "mouse_path_straightness",
+      "click_count",
+      "click_rate",
+      "mean_click_interval_ms",
+      "std_click_interval_ms",
+      "min_click_interval_ms",
+      "max_click_interval_ms",
+      "button_click_ratio",
+      "link_click_ratio",
+      "input_click_ratio",
+      "other_click_ratio",
+      "key_event_count",
+      "mean_dwell_ms",
+      "std_dwell_ms",
+      "min_dwell_ms",
+      "max_dwell_ms",
+      "mean_flight_ms",
+      "std_flight_ms",
+      "min_flight_ms",
+      "max_flight_ms",
+      "mean_inter_key_interval_ms",
+      "std_inter_key_interval_ms",
+      "typing_speed",
+      "scroll_event_count",
+      "total_scroll_distance",
+      "mean_scroll_velocity",
+      "std_scroll_velocity",
+      "max_scroll_velocity",
+      "upward_scroll_ratio",
+      "downward_scroll_ratio",
+      "scroll_direction_change_count",
+      "mean_scroll_interval_ms",
+      "scroll_burst_count",
+      "navigation_count",
+      "unique_route_count",
+      "mean_page_dwell_ms",
+      "std_page_dwell_ms",
+      "min_page_dwell_ms",
+      "max_page_dwell_ms",
+      "navigation_rate",
+      "repeated_route_count",
+      "route_repetition_ratio",
+      "visibility_event_count",
+      "total_time_away_ms",
+      "mean_time_away_ms",
+      "total_behavior_event_count",
+      "events_per_second",
+      "mouse_to_click_ratio",
+      "click_to_navigation_ratio",
+      "navigation_to_session_ratio"
+    ],
+    "scaling_applied": false
+  },
+  "decision_policy": {
+    "default_decision_threshold": 0.5,
+    "label_encoding": {
+      "0": "HUMAN",
+      "1": "AUTOMATED"
+    },
+    "positive_class": 1
+  },
+  "model_artifact": {
+    "filename": "experiment_a_xgboost.joblib",
+    "relative_path": "ml/models/experiment_a_xgboost.joblib",
+    "artifact_sha256": "74ff7cb594ffa953ed51e433e5f059a9fbb19dd8beb650c422d1acec88b70fb0"
+  },
+  "historical_evaluation_benchmark": {
+    "protocol": "Leave-One-Task-Out (LOTO) 3-Fold Cross-Validation",
+    "mean_balanced_accuracy": 0.9259,
+    "mean_macro_f1": 0.9388,
+    "mean_precision": 1.0,
+    "mean_recall": 1.0,
+    "mean_human_fpr": 0.1481,
+    "folds": [
+      {
+        "fold_id": "LOTO_TEST_TASK_03",
+        "train_tasks": [
+          "TASK_01",
+          "TASK_02"
+        ],
+        "test_tasks": [
+          "TASK_03"
+        ],
+        "train_samples": 36,
+        "test_samples": 17,
+        "balanced_accuracy": 1.0,
+        "macro_f1": 1.0,
+        "human_fpr": 0.0
+      },
+      {
+        "fold_id": "LOTO_TEST_TASK_02",
+        "train_tasks": [
+          "TASK_01",
+          "TASK_03"
+        ],
+        "test_tasks": [
+          "TASK_02"
+        ],
+        "train_samples": 34,
+        "test_samples": 19,
+        "balanced_accuracy": 0.7778,
+        "macro_f1": 0.8163,
+        "human_fpr": 0.2222
+      },
+      {
+        "fold_id": "LOTO_TEST_TASK_01",
+        "train_tasks": [
+          "TASK_02",
+          "TASK_03"
+        ],
+        "test_tasks": [
+          "TASK_01"
+        ],
+        "train_samples": 36,
+        "test_samples": 17,
+        "balanced_accuracy": 1.0,
+        "macro_f1": 1.0,
+        "human_fpr": 0.0
+      }
+    ],
+    "disclaimer": "The historical LOTO metrics above represent the true offline generalizability estimate across experimental tasks. The final fitted model was trained on all 53 sessions to maximize signal coverage for local demonstration. Its training-set accuracy MUST NOT be cited as independent generalization performance."
+  },
+  "demonstration_disclaimer": "This model was fitted on all 53 authorized Phase 1 development sessions strictly for local system demonstration and backend integration. It is NOT a production-validated bot detection system. Training set predictions must not be used as evidence of generalization. The human false-positive rate under LOTO cross-validation is 14.81%."
+}

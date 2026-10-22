@@ -34,9 +34,13 @@ class SessionEndRequest(BaseModel):
     task_id: Optional[str] = Field(default=None, description="Optional task ID override on completion")
     label: Optional[int] = Field(default=None, description="Optional authoritative label on completion")
 
+from backend.app.schemas.risk import ModelInferenceDetail
+
 class SessionEndResponse(BaseModel):
     session_id: str
     status: str = "COMPLETED"
     duration_seconds: float = Field(..., ge=0.0, description="Total active session duration in seconds")
     total_events_captured: int = Field(default=0, ge=0)
     final_integrity_score: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    ml_inference: Optional[ModelInferenceDetail] = Field(default=None, description="Model inference outcome if evaluated")
+

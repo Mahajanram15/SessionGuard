@@ -241,60 +241,120 @@ npm run build
 
 ---
 
-## 9. API and Dashboard
+## 9. Comprehensive Documentation Index
 
-The FastAPI application exposes:
+All core technical, experimental, and governance specifications are organized in the [`docs/`](docs/) directory:
 
-- `GET /health` for service and component health.
-- `GET /api/dashboard/stats` for dashboard aggregates.
-- Session, behavioral telemetry, API telemetry, and risk endpoints under
-  `/api`; the complete request and response contract is in
-  [`docs/api-contract.md`](docs/api-contract.md).
-
-The React dashboard consumes the API through `VITE_API_BASE_URL` and provides
-an analyst-oriented view of tracked sessions, risk distribution, subsystem
-health, and privacy guardrails.
-
-## 10. Validation
-
-Run the Python test suite from the repository root:
-
-```bash
-python -m pytest
-```
-
-Build and test the browser SDK:
-
-```bash
-cd browser-sdk
-npm test
-```
-
-Build the frontend:
-
-```bash
-cd frontend
-npm run build
-```
-
-The tests cover feature extraction, numerical safety, privacy guarantees,
-dataset collection, API telemetry, and ML experiment helpers.
+| Document | Purpose & Scope |
+| :--- | :--- |
+| [`docs/architecture.md`](docs/architecture.md) | End-to-end system dataflow from browser SDK to risk fusion. |
+| [`docs/api-contract.md`](docs/api-contract.md) | Complete REST API request/response schemas for telemetry and mock domain routes. |
+| [`docs/data-dictionary.md`](docs/data-dictionary.md) | Telemetry event payloads, 76 canonical features, 29 kinematic features, and export formats. |
+| [`docs/experimental-methodology.md`](docs/experimental-methodology.md) | Dataset provenance, windowing ($W=30, S=15$), leakage controls, and validation rules. |
+| [`docs/experiment-a-results-report.md`](docs/experiment-a-results-report.md) | Verified 53-session LOTO benchmark metrics, hypothesis evaluations, and limitations. |
+| [`docs/privacy-data-lifecycle.md`](docs/privacy-data-lifecycle.md) | Zero-text privacy boundary, storage layers, withdrawal mechanics, and open blockers. |
+| [`docs/PARTICIPANT_CONSENT_BRIEF.md`](docs/PARTICIPANT_CONSENT_BRIEF.md) | Participant information sheet and informed consent briefing protocol. |
+| [`docs/reproducibility-guide.md`](docs/reproducibility-guide.md) | Exact step-by-step reproduction commands, verification hashes, and environment setup. |
+| [`docs/demonstration-guide.md`](docs/demonstration-guide.md) | Live demonstration walkthrough, operator script, UI behavior, and fallback modes. |
+| [`docs/final-project-status-report.md`](docs/final-project-status-report.md) | Executive audit, requirements matrix, 133 verified passing tests, and blocker register. |
 
 ---
 
-## 11. Future Machine Learning Pipeline
+## 10. Environment Variables Configuration
 
-1. **Browser Telemetry Engine**: XGBoost binary classifier trained on statistical trajectory dynamics (velocity variance, curvature, keystroke dwell times).
-2. **API Semantic Embeddings**: FastText subword tokenization mapped into FAISS vector space to detect semantic intent drift.
-3. **API Structure Engine**: CountVectorizer tokenization with Agglomerative Hierarchical Clustering.
-4. **Sequence Engine**: Discrete Markov Chain transition matrices modeling UI state to API endpoint causal sequences.
-5. **Cross-Layer Fusion**: Weighted fusion combining individual anomaly probabilities and the cross-layer discordance metric $\Phi(S_b, S_a)$.
+The application is configured via environment variables (or `.env` in root):
+
+| Variable Name | Default Value | Description |
+| :--- | :--- | :--- |
+| `ENVIRONMENT` | `development` | Deployment environment (`development`, `staging`, `production`). |
+| `DEBUG` | `True` | Enables hot-reload and extended debug logs. |
+| `LOG_LEVEL` | `INFO` | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`). |
+| `API_HOST` | `0.0.0.0` | Host IP address binding for FastAPI/Uvicorn. |
+| `API_PORT` | `8000` | Port binding for the backend API service. |
+| `API_BASE_URL` | `http://localhost:8000` | Base URL used by internal services. |
+| `VITE_API_BASE_URL` | `/api` | Base API route used by React frontend (proxied via Vite). |
+| `CORS_ORIGINS` | `http://localhost:3000,http://localhost:5173` | Comma-delimited permitted CORS origins. |
+| `DATABASE_URL` | `postgresql+asyncpg://...` | Asynchronous PostgreSQL database connection URI. |
+| `DATABASE_SYNC_URL` | `postgresql://...` | Synchronous PostgreSQL connection URI for migrations. |
+| `RISK_THRESHOLD_ALLOW` | `0.35` | Maximum risk score for automatic ALLOW decision. |
+| `RISK_THRESHOLD_CHALLENGE` | `0.70` | Threshold above which session is subject to RATE_LIMIT/BLOCK. |
 
 ---
 
-## 12. Security & Privacy Principles
+## 11. Application Routes & Endpoint Reference
 
-- **Zero Keystroke Content Capture**: The system captures only inter-key time intervals and key-hold durations. Character identities, keys pressed, and strings are stripped before telemetry is emitted.
-- **Form Value Isolation**: Form inputs, text areas, search queries, and passwords are never collected.
-- **Anonymized Client ID**: Client IP addresses are stored exclusively as SHA-256 salted hashes.
-- **Auditable Decisions**: Every elevated risk determination ($R \ge 0.35$) generates SHAP feature attribution rankings and deterministic rule identifiers.
+### Frontend Application Views
+- `/` or `/demo/sandbox`: **Behavioral Sandbox & Telemetry Collector** (live interaction canvas, bot simulation, export).
+- `/overview`: **Security Operations Center (SOC) Overview** (system health, risk distribution, session history).
+
+### Core Backend API Endpoints
+| Route | Method | Description |
+| :--- | :--- | :--- |
+| `/health` | `GET` | Service liveness and component health check. |
+| `/api/session/start` | `POST` | Initiates tracked session; binds participant, task, and mode. |
+| `/api/session/end` | `POST` | Completes session, triggers feature computation, freezes state. |
+| `/api/behavior/events` | `POST` | Ingests micro-batches of raw behavioral telemetry (privacy-validated). |
+| `/api/api-requests` | `POST` | Ingests application domain API telemetry records. |
+| `/api/risk/evaluate/{id}` | `GET` | Computes live cross-layer behavioral risk score and SHAP attribution. |
+| `/api/dataset/summary` | `GET` | Returns session collection balance and task breakdown. |
+| `/api/dataset/export/phase2` | `POST` | Sandboxed export of development sessions into `ml/data/phase2_development/`. |
+| `/api/products` | `GET` | Mock catalog endpoint for Experiment B (TASK_01). |
+| `/api/search` | `GET` | Mock search endpoint for Experiment B (TASK_02). |
+| `/api/cart/items` | `POST` | Mock cart addition for Experiment B (TASK_03). |
+| `/api/checkout/verify` | `POST` | Mock checkout verification for Experiment B (TASK_03). |
+
+---
+
+## 12. Automated Verification & Testing
+
+The repository contains an exhaustive automated test suite with **133 unit and integration tests passing 100%**:
+
+```powershell
+# Set workspace root in PYTHONPATH and run all tests
+$env:PYTHONPATH="."
+.\.venv\Scripts\python.exe -m pytest tests/ -v
+```
+
+### Module Breakdown:
+- `tests/test_phase2_safeguards.py` (21 tests): Privacy validator, quarantine gate, lifecycle rejection, export containment.
+- `tests/test_phase2_kinematics.py` (9 tests): 29-feature schema, window boundaries ($W=30, S=15$), Clopper-Pearson intervals.
+- `tests/test_feature_config.py` (5 tests): Canonical 76 vs 64 selected Experiment A features.
+- `tests/test_feature_engineering.py` (12 tests): Numerical safety, zero NaNs/Infs, modality sparsity.
+- `tests/test_mock_domain_api.py` (23 tests): Deterministic e-commerce endpoints, validation, error handling.
+- `tests/test_api_telemetry.py` (19 tests): API request logging, monotonic sequencing, parameter key extraction.
+- `tests/test_human_api_telemetry_integration.py` (10 tests): Human session binding, endpoint invocation, stop flushes.
+- `tests/test_dataset_collection.py` (17 tests): Multi-task labeling, variable seed determinism, CSV export.
+- `tests/test_evaluation_protocol.py` (12 tests): Leakage prevention, LOTO/LOGO fold splits on 53 sessions.
+- `tests/test_train_experiment_a.py` (5 tests): Reproducible LOTO evaluation, XGBoost vs Majority Baseline.
+
+---
+
+## 13. Troubleshooting & Frequently Asked Questions
+
+### 1. Port Collisions (Port 8000 or 5173 already in use)
+- **Symptom:** `OSError: [Errno 10048] error while attempting to bind on address ('0.0.0.0', 8000)`.
+- **Solution:** Identify and terminate the occupying process, or launch Uvicorn on an alternate port:
+  ```powershell
+  python -m uvicorn backend.app.main:app --port 8001
+  ```
+  Update `VITE_API_BASE_URL` in `frontend/vite.config.ts` or set proxy target.
+
+### 2. ModuleNotFoundError: No module named 'ml' or 'backend'
+- **Symptom:** Pytest fails during collection with `ModuleNotFoundError`.
+- **Solution:** Always set `$env:PYTHONPATH="."` (Windows PowerShell) or `export PYTHONPATH="."` (Linux/macOS) in the workspace root before invoking pytest.
+
+### 3. Database Connection Warning During Local Dev
+- **Symptom:** `[SessionService DB Warning] Could not update session in PostgreSQL`.
+- **Explanation:** In local standalone mode without a running PostgreSQL instance, CrossTrace operates seamlessly using its high-performance in-memory cache and `.active_sessions_cache.json`. Database warnings are non-fatal fallbacks.
+
+### 4. Privacy Violation on Ingestion
+- **Symptom:** Client receives `HTTP 400 Bad Request` with `PrivacyViolationError`.
+- **Explanation:** Telemetry payload contained a forbidden field (such as typed key strings, form input values, or password interactions). Verify that the Browser SDK privacy filter is enabled.
+
+---
+
+## 14. Governance Status & Research Ethics
+
+- **Human Recruitment Status:** **NO-GO.** Human participant enrollment remains disabled pending institutional ethics review, retention schedule confirmation, and withdrawal contact approval.
+- **Privacy Guarantees:** Telemetry is classified as **pseudonymous research data**. Client IP addresses are stored exclusively as SHA-256 hashes (`ip_hash`). Raw typed keystrokes and form inputs are strictly excluded.
+

@@ -125,8 +125,9 @@ export const TelemetryDemoPage: React.FC<TelemetryDemoPageProps> = ({
         label: collectionMode === 'HUMAN' ? 0 : 1,
       });
       onRefreshStats();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to start SDK:', err);
+      setApiError(err?.message || 'Failed to start session. Ensure backend API is running.');
     } finally {
       setLoading(false);
     }
@@ -137,8 +138,9 @@ export const TelemetryDemoPage: React.FC<TelemetryDemoPageProps> = ({
     try {
       await sdk.stop(`${collectionMode}_${selectedTask}_COMPLETED`);
       onRefreshStats();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to stop SDK:', err);
+      setApiError(err?.message || 'Failed to stop session.');
     } finally {
       setLoading(false);
     }
@@ -149,8 +151,9 @@ export const TelemetryDemoPage: React.FC<TelemetryDemoPageProps> = ({
     try {
       await sdk.flush();
       onRefreshStats();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to flush buffer:', err);
+      setApiError(err?.message || 'Failed to flush buffer.');
     } finally {
       setLoading(false);
     }
@@ -224,14 +227,22 @@ export const TelemetryDemoPage: React.FC<TelemetryDemoPageProps> = ({
   };
 
   const handleExportDataset = async () => {
+    setLoading(true);
     try {
-      const res = await fetch('/api/dataset/export', { method: 'POST' });
+      const res = await fetch('/api/dataset/export?target_partition=phase2_development', { method: 'POST' });
       if (res.ok) {
         const data = await res.json();
-        setExportNotice(`Exported ${data.usable_sessions} sessions to ml/data/features.csv and ml/data/metadata.csv`);
+        const exportPath = data.paths?.features_csv || 'ml/data/phase2_development/features.csv';
+        setExportNotice(`Exported ${data.usable_sessions} development sessions to ${exportPath}`);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        setExportNotice(`Export failed: ${errData.detail || res.statusText}`);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Export failed:', err);
+      setExportNotice('Export failed: Unable to connect to backend export API');
+    } finally {
+      setLoading(false);
     }
   };
 

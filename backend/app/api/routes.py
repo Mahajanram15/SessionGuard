@@ -125,6 +125,14 @@ async def get_session_explanation(session_id: str):
     """
     return await risk_service.get_explanation(session_id)
 
+@router.get("/model/status", status_code=status.HTTP_200_OK)
+async def get_model_status():
+    """
+    Returns the operational status, version, and integrity digest of the frozen ML model.
+    """
+    from backend.app.services.ml_inference_service import ml_inference_service
+    return ml_inference_service.get_status()
+
 # ------------------------------------------------------------------------------
 # 4. Security Dashboard Endpoints
 # ------------------------------------------------------------------------------

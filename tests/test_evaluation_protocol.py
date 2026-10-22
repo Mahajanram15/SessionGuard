@@ -98,8 +98,8 @@ class TestEvaluationProtocol(unittest.TestCase):
         self.assertIn("TASK_03", task_metrics)
 
         for task, res in task_metrics.items():
-            self.assertEqual(res["n_samples"], 15)
-            self.assertEqual(res["n_human"], 5)
+            self.assertIn(res["n_samples"], [17, 19])
+            self.assertIn(res["n_human"], [7, 9])
             self.assertEqual(res["n_automated"], 10)
             self.assertEqual(res["balanced_accuracy"], 1.0)
 
@@ -120,13 +120,20 @@ class TestEvaluationProtocol(unittest.TestCase):
             self.assertEqual(fold.train_tasks, train_tasks)
             self.assertEqual(fold.test_tasks, test_tasks)
 
-            # Sample counts (30 train = 10H + 20A; 15 test = 5H + 10A)
-            self.assertEqual(fold.n_train_total, 30)
-            self.assertEqual(fold.n_train_human, 10)
+            # Sample counts on 53-session dataset (30 automated, 23 human)
+            if fold.fold_id == "LOTO_TEST_TASK_02":
+                self.assertEqual(fold.n_train_total, 34)
+                self.assertEqual(fold.n_train_human, 14)
+                self.assertEqual(fold.n_test_total, 19)
+                self.assertEqual(fold.n_test_human, 9)
+            else:
+                self.assertEqual(fold.n_train_total, 36)
+                self.assertEqual(fold.n_train_human, 16)
+                self.assertEqual(fold.n_test_total, 17)
+                self.assertEqual(fold.n_test_human, 7)
             self.assertEqual(fold.n_train_automated, 20)
-            self.assertEqual(fold.n_test_total, 15)
-            self.assertEqual(fold.n_test_human, 5)
             self.assertEqual(fold.n_test_automated, 10)
+            self.assertEqual(fold.n_train_total + fold.n_test_total, 53)
 
             # Multiclass presence
             self.assertTrue(fold.is_train_multiclass)
@@ -154,8 +161,8 @@ class TestEvaluationProtocol(unittest.TestCase):
         p01_fold = [f for f in group_folds if "p_01" in f.test_participants][0]
         self.assertTrue(p01_fold.is_valid)
         self.assertEqual(p01_fold.validity_status, "TEST_SINGLE_CLASS")
-        self.assertEqual(p01_fold.n_train_human, 12)  # p_02, p_03, p_04, p_05
-        self.assertEqual(p01_fold.n_test_human, 3)
+        self.assertEqual(p01_fold.n_train_human, 14)  # 23 total human - 9 for p_01
+        self.assertEqual(p01_fold.n_test_human, 9)
 
     def test_baseline_classifier_majority(self):
         """Baseline classifier majority strategy behaves deterministically."""
@@ -167,8 +174,8 @@ class TestEvaluationProtocol(unittest.TestCase):
 
         probs = clf.predict_proba(self.X)
         self.assertEqual(probs.shape, (len(self.X), 2))
-        np.testing.assert_allclose(probs[:, 1], 30.0 / 45.0)
-        np.testing.assert_allclose(probs[:, 0], 15.0 / 45.0)
+        np.testing.assert_allclose(probs[:, 1], 30.0 / 53.0)
+        np.testing.assert_allclose(probs[:, 0], 23.0 / 53.0)
 
     def test_research_comparison_specification(self):
         """Verify comparison specification contracts."""
