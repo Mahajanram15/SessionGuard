@@ -210,18 +210,62 @@ class TestElearningDomainApi(unittest.TestCase):
         self.assertGreaterEqual(data["total_results"], 1)
         self.assertTrue(any("brody" in c["instructor"].lower() for c in data["results"]))
 
-    def test_course_search_limit_and_empty(self):
-        """Verify search limits and empty results handling."""
+    def test_course_search_variations(self):
+        """Verify course search handles punctuation, casing, spacing, and compact variations."""
+        variations = [
+            "Full-Stack",
+            "full stack",
+            "FULL STACK",
+            "fullstack",
+            "stack",
+            "  full stack  ",
+        ]
+        for q in variations:
+            res = self.client.get(f"/api/courses/search?q={q}")
+            self.assertEqual(res.status_code, 200, f"Search failed for variation: '{q}'")
+            data = res.json()
+            self.assertGreaterEqual(data["total_results"], 1, f"Expected at least 1 match for '{q}'")
+            matched_ids = [c["id"] for c in data["results"]]
+            self.assertIn("course_web102", matched_ids, f"Expected 'course_web102' for query '{q}'")
+
+    def test_course_search_partial_tokens(self):
+        """Verify relevant partial searches such as 'web' and 'react' match relevant courses."""
+        for q in ["web", "react"]:
+            res = self.client.get(f"/api/courses/search?q={q}")
+            self.assertEqual(res.status_code, 200)
+            data = res.json()
+            self.assertGreaterEqual(data["total_results"], 1)
+            matched_ids = [c["id"] for c in data["results"]]
+            self.assertIn("course_web102", matched_ids)
+
+    def test_course_search_empty_query_restores_catalog(self):
+        """Verify empty query or whitespace trims and restores full course catalog."""
+        # Empty query string
+        res_empty = self.client.get("/api/courses/search?q=")
+        self.assertEqual(res_empty.status_code, 200)
+        data_empty = res_empty.json()
+        self.assertEqual(data_empty["total_results"], len(MOCK_COURSES))
+        self.assertEqual(len(data_empty["results"]), min(10, len(MOCK_COURSES)))
+
+        # Whitespace query string
+        res_spaces = self.client.get("/api/courses/search?q=%20%20%20")
+        self.assertEqual(res_spaces.status_code, 200)
+        data_spaces = res_spaces.json()
+        self.assertEqual(data_spaces["total_results"], len(MOCK_COURSES))
+
+        # Query parameter omitted entirely
+        res_omitted = self.client.get("/api/courses/search")
+        self.assertEqual(res_omitted.status_code, 200)
+        data_omitted = res_omitted.json()
+        self.assertEqual(data_omitted["total_results"], len(MOCK_COURSES))
+
+    def test_course_search_no_matching_results(self):
+        """Verify search with no matching results returns 0 items."""
         res = self.client.get("/api/courses/search?q=quantum_teleportation_nonexistent")
         self.assertEqual(res.status_code, 200)
         data = res.json()
         self.assertEqual(data["total_results"], 0)
         self.assertEqual(len(data["results"]), 0)
-
-    def test_course_search_validation(self):
-        """Verify search query validation returns 422 for missing query."""
-        res = self.client.get("/api/courses/search")
-        self.assertEqual(res.status_code, 422)
 
     # --------------------------------------------------------------------------
     # 4. Simulated Course Enrollment

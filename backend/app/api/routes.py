@@ -1,3 +1,4 @@
+import re
 from typing import Optional, Any, Dict, List
 from fastapi import APIRouter, Request, status, HTTPException, Depends, Query
 
@@ -424,22 +425,69 @@ async def get_course_details(
         )
     return CourseDetailResponse(**course)
 
+def _normalize_search_text(text: str) -> str:
+    """Replaces common punctuation with spaces and folds case."""
+    return re.sub(r'[\-_/.,:;()\[\]{}!?"\']', ' ', text.lower())
+
+def _compact_search_text(text: str) -> str:
+    """Removes all non-alphanumeric characters and folds case."""
+    return re.sub(r'[^a-z0-9]', '', text.lower())
+
+def _course_matches_query(query: str, course: Dict[str, Any]) -> bool:
+    q_trimmed = query.strip()
+    if not q_trimmed:
+        return True
+
+    fields = [
+        str(course.get("title", "")),
+        str(course.get("category", "")),
+        str(course.get("instructor", "")),
+        str(course.get("description", "")),
+    ]
+
+    # 1. Direct case-insensitive substring match
+    q_lower = q_trimmed.lower()
+    for field in fields:
+        if q_lower in field.lower():
+            return True
+
+    # 2. Normalized punctuation match (e.g. 'full stack' matching 'Full-Stack')
+    q_norm = _normalize_search_text(q_trimmed)
+    q_tokens = [tok for tok in q_norm.split() if tok]
+    combined_norm = " ".join(_normalize_search_text(f) for f in fields)
+    if q_tokens and all(tok in combined_norm for tok in q_tokens):
+        return True
+
+    # 3. Compact alphanumeric match (e.g. 'fullstack' matching 'Full-Stack')
+    q_compact = _compact_search_text(q_trimmed)
+    if len(q_compact) >= 2:
+        for field in fields:
+            if q_compact in _compact_search_text(field):
+                return True
+
+    return False
+
 @router.get("/courses/search", response_model=CourseSearchResponse, status_code=status.HTTP_200_OK)
 async def search_courses(
-    q: str = Query(..., min_length=1, max_length=128, description="Course search query string"),
+    q: str = Query(default="", max_length=128, description="Course search query string"),
     limit: int = Query(10, ge=1, le=50, description="Maximum number of results to return")
 ):
     """
     Returns deterministic course search results matching title, category, instructor, or description.
+    Supports case-insensitivity, punctuation normalization, partial tokens, and compact matching.
+    An empty query restores the full course catalog.
     """
-    q_lower = q.strip().lower()
-    matches = [
-        c for c in MOCK_COURSES.values()
-        if q_lower in c["title"].lower()
-        or q_lower in c["category"].lower()
-        or q_lower in c["instructor"].lower()
-        or q_lower in c["description"].lower()
-    ]
+    q_trimmed = q.strip()
+    if not q_trimmed:
+        items = list(MOCK_COURSES.values())[:limit]
+        return CourseSearchResponse(
+            query=q,
+            results=[CourseItem(**c) for c in items],
+            total_results=len(MOCK_COURSES),
+            limit=limit
+        )
+
+    matches = [c for c in MOCK_COURSES.values() if _course_matches_query(q_trimmed, c)]
     sliced = matches[:limit]
     return CourseSearchResponse(
         query=q,

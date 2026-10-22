@@ -101,6 +101,13 @@ export const LearnSphereLandingPage: React.FC<LearnSphereLandingPageProps> = ({
     loadCourses(searchQuery, selectedCategory, selectedDifficulty);
   }, [selectedCategory, selectedDifficulty]);
 
+  const handleSearchChange = (q: string) => {
+    setSearchQuery(q);
+    if (!q.trim()) {
+      loadCourses('', selectedCategory, selectedDifficulty);
+    }
+  };
+
   const handleSearchSubmit = () => {
     loadCourses(searchQuery, selectedCategory, selectedDifficulty);
   };
@@ -529,7 +536,7 @@ export const LearnSphereLandingPage: React.FC<LearnSphereLandingPageProps> = ({
           {/* Top Search & Profile Area */}
           <TopHeader
             searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
+            onSearchChange={handleSearchChange}
             onSearchSubmit={handleSearchSubmit}
             selectedCategory={selectedCategory}
             onSelectCategory={setSelectedCategory}
