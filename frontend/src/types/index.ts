@@ -132,3 +132,81 @@ export interface DomainApiResult<T> {
   responseTimeMs: number;
 }
 
+// ------------------------------------------------------------------------------
+// LearnSphere E-Learning Domain Types
+// ------------------------------------------------------------------------------
+
+export interface QuizOption {
+  id: string;
+  text: string;
+}
+
+export interface QuizQuestion {
+  id: string;
+  question: string;
+  options: QuizOption[];
+  correct_option_id: string;
+  explanation: string;
+}
+
+export interface LessonItem {
+  id: string;
+  title: string;
+  duration_minutes: number;
+  order: number;
+  video_url: string;
+  description: string;
+  quiz?: QuizQuestion[] | null;
+}
+
+export interface CourseItem {
+  id: string;
+  title: string;
+  category: string;
+  difficulty: string;
+  duration_hours: number;
+  instructor: string;
+  rating: number;
+  review_count: number;
+  price: number;
+  is_free: boolean;
+  description: string;
+  thumbnail_url: string;
+  lesson_count: number;
+}
+
+export interface CourseDetailResponse extends CourseItem {
+  learning_objectives: string[];
+  prerequisites: string[];
+  lessons: LessonItem[];
+  enrollment_count: number;
+}
+
+export interface CourseListResponse {
+  courses: CourseItem[];
+  total: number;
+  page: number;
+  page_size: number;
+  category?: string | null;
+  difficulty?: string | null;
+}
+
+export interface CourseSearchResponse {
+  query: string;
+  results: CourseItem[];
+  total_results: number;
+  limit: number;
+}
+
+export interface EnrollmentResponse {
+  status: string;
+  enrollment_id: string;
+  course_id: string;
+  course_title: string;
+  plan_type: string;
+  is_demo: boolean;
+  enrolled_at: string;
+  message: string;
+}
+
+

@@ -1,10 +1,10 @@
 import React from 'react';
-import { Shield, Radio, LayoutDashboard } from 'lucide-react';
+import { Shield, Radio, LayoutDashboard, GraduationCap } from 'lucide-react';
 
 interface NavbarProps {
   systemHealth: string;
-  activeTab: 'overview' | 'sandbox';
-  onTabChange: (tab: 'overview' | 'sandbox') => void;
+  activeTab: 'learnsphere' | 'sandbox' | 'overview';
+  onTabChange: (tab: 'learnsphere' | 'sandbox' | 'overview') => void;
   isStreaming: boolean;
 }
 
@@ -25,20 +25,32 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div>
             <div className="flex items-center space-x-2">
               <span className="font-semibold text-slate-100 tracking-tight text-base">
-                Behavioral Integrity
+                CrossTrace
               </span>
               <span className="text-xs px-2 py-0.5 rounded-full font-mono bg-cyber-emerald/10 text-cyber-emerald border border-cyber-emerald/30">
-                Phase 2: Browser SDK
+                Phase 2: LearnSphere
               </span>
             </div>
             <p className="text-[11px] text-slate-400 font-mono">
-              Cross-Layer Behavioral Verification
+              Behavioral Integrity Verification System
             </p>
           </div>
         </div>
 
         {/* Navigation Tabs */}
         <div className="flex items-center space-x-1 bg-surface-elevated/80 p-1 rounded-lg border border-border/70">
+          <button
+            onClick={() => onTabChange('learnsphere')}
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+              activeTab === 'learnsphere'
+                ? 'bg-purple-600 text-white shadow'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <GraduationCap className="w-3.5 h-3.5" />
+            <span>LearnSphere</span>
+          </button>
+
           <button
             onClick={() => onTabChange('sandbox')}
             className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${

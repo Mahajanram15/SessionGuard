@@ -2,12 +2,13 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Navbar } from './components/Navbar';
 import { DashboardShell } from './pages/DashboardShell';
 import { TelemetryDemoPage } from './pages/TelemetryDemoPage';
-import { apiClient } from './services/api';
+import { LearnSphereLandingPage } from './pages/learnsphere/LearnSphereLandingPage';
+import { apiClient, createAppApiClient } from './services/api';
 import { DashboardStats, HealthResponse } from './types';
 import { BehavioralSDK, TelemetryStats } from '@behavioral-integrity/sdk';
 
 export const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'sandbox' | 'overview'>('sandbox');
+  const [activeTab, setActiveTab] = useState<'learnsphere' | 'sandbox' | 'overview'>('learnsphere');
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -19,7 +20,7 @@ export const App: React.FC = () => {
       batchIntervalMs: 2000,
       maxBatchSize: 40,
       sampleRateMouseHz: 30,
-      debug: true,
+      debug: false,
     });
   }, []);
 
@@ -36,6 +37,16 @@ export const App: React.FC = () => {
     }, 1000);
     return () => clearInterval(timer);
   }, [refreshSdkStats]);
+
+  // Shared instrumented domain API client bound to active SDK session
+  const appClient = useMemo(() => {
+    return createAppApiClient({
+      getSessionId: () => sdk.getSessionId(),
+      onTelemetryEmitted: () => {
+        refreshSdkStats();
+      },
+    });
+  }, [sdk, refreshSdkStats]);
 
   useEffect(() => {
     async function loadInitialData() {
@@ -79,29 +90,45 @@ export const App: React.FC = () => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-background flex flex-col font-sans">
+    <div className={`min-h-screen flex flex-col font-sans ${activeTab === 'learnsphere' ? 'bg-[#ECEAF6]' : 'bg-background'}`}>
       <Navbar
         systemHealth={health?.status || 'initializing'}
         activeTab={activeTab}
         onTabChange={setActiveTab}
         isStreaming={sdkStats.isRunning}
       />
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {activeTab === 'sandbox' ? (
-          <TelemetryDemoPage
-            sdk={sdk}
-            stats={sdkStats}
-            onRefreshStats={refreshSdkStats}
+
+      {activeTab === 'learnsphere' ? (
+        <div className="flex-1 w-full">
+          <LearnSphereLandingPage
+            appClient={appClient}
+            onExploreCatalog={() => setActiveTab('learnsphere')}
           />
-        ) : (
-          <DashboardShell stats={stats} health={health} loading={loading} />
-        )}
-      </main>
-      <footer className="border-t border-border/60 py-6 text-center text-xs text-slate-500 font-mono">
-        Browser-to-Backend Behavioral Integrity Verification System &copy; 2026 | Phase 2: Browser Telemetry Collection
+        </div>
+      ) : (
+        <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {activeTab === 'sandbox' ? (
+            <TelemetryDemoPage
+              sdk={sdk}
+              stats={sdkStats}
+              onRefreshStats={refreshSdkStats}
+            />
+          ) : (
+            <DashboardShell stats={stats} health={health} loading={loading} />
+          )}
+        </main>
+      )}
+
+      <footer className={`border-t py-6 text-center text-xs font-mono transition-colors ${
+        activeTab === 'learnsphere'
+          ? 'bg-[#ECEAF6] border-purple-200/60 text-slate-500'
+          : 'bg-background border-border/60 text-slate-500'
+      }`}>
+        CrossTrace Behavioral Integrity Verification &bull; LearnSphere Demonstration &copy; 2026
       </footer>
     </div>
   );
 };
 
 export default App;
+

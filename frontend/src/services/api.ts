@@ -11,6 +11,10 @@ import {
   CheckoutVerifyResponse,
   ApiTelemetryRecord,
   DomainApiResult,
+  CourseListResponse,
+  CourseDetailResponse,
+  CourseSearchResponse,
+  EnrollmentResponse,
 } from '../types';
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/+$/, '');
@@ -60,6 +64,10 @@ export interface AppApiClient {
   getCatalog(category?: string): Promise<DomainApiResult<CatalogResponse>>;
   addCartItem(itemId: string, quantity: number): Promise<DomainApiResult<CartItemResponse>>;
   verifyCheckout(shippingMethod: string, currency: string): Promise<DomainApiResult<CheckoutVerifyResponse>>;
+  getCourses(params?: { category?: string; difficulty?: string; page?: number; page_size?: number }): Promise<DomainApiResult<CourseListResponse>>;
+  getCourseDetails(id: string): Promise<DomainApiResult<CourseDetailResponse>>;
+  searchCourses(q: string, limit?: number): Promise<DomainApiResult<CourseSearchResponse>>;
+  enrollCourse(courseId: string, planType?: string, learnerName?: string): Promise<DomainApiResult<EnrollmentResponse>>;
 }
 
 /**
@@ -235,6 +243,26 @@ export function createAppApiClient(options: AppApiClientOptions = {}): AppApiCli
       return executeDomainRequest<CheckoutVerifyResponse>('POST', '/checkout/verify', undefined, {
         shipping_method: shippingMethod,
         currency,
+      });
+    },
+
+    async getCourses(params = {}) {
+      return executeDomainRequest<CourseListResponse>('GET', '/courses', params);
+    },
+
+    async getCourseDetails(id: string) {
+      return executeDomainRequest<CourseDetailResponse>('GET', '/courses/details', { id });
+    },
+
+    async searchCourses(q: string, limit = 10) {
+      return executeDomainRequest<CourseSearchResponse>('GET', '/courses/search', { q, limit });
+    },
+
+    async enrollCourse(courseId: string, planType = 'free', learnerName = 'Demo Learner') {
+      return executeDomainRequest<EnrollmentResponse>('POST', '/courses/enroll', undefined, {
+        course_id: courseId,
+        plan_type: planType,
+        learner_name: learnerName,
       });
     },
   };
