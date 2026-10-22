@@ -108,6 +108,31 @@ class TestStage6ModelLimitationIntegrity(unittest.TestCase):
             "74ff7cb594ffa953ed51e433e5f059a9fbb19dd8beb650c422d1acec88b70fb0"
         )
 
+    def test_05_empty_state_semantics_all_zero_vs_unavailable(self):
+        """
+        Verify distinct semantic states between:
+        1. Unavailable explanation (no telemetry / inference not run).
+        2. Valid explanation with zero non-zero attribution features.
+        """
+        # Case 1: Session with no telemetry -> unavailable explanation
+        res_start = self.client.post("/api/session/start", json={
+            "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0",
+            "client_timestamp": 1700000000000,
+            "collection_mode": "HUMAN",
+        })
+        s_id_unavail = res_start.json()["session_id"]
+        res_expl_unavail = self.client.get(f"/api/explanation/{s_id_unavail}").json()
+        self.assertEqual(res_expl_unavail["shap_contributions"], [])
+        ml_stat = (res_expl_unavail.get("ml_inference") or {}).get("status")
+        self.assertIn(ml_stat, ["insufficient_telemetry", "prediction_not_ready", None])
+
+        # Case 2: explain_from_features contract guarantees zero-attribution features are never padded
+        all_zero_features = {f: 0.0 for f in ml_inference_service._ordered_features}
+        contribs = ml_inference_service.explain_from_features(all_zero_features, top_k=5, nonzero_only=True)
+        # Every returned item must have a genuine non-zero contribution
+        for item in contribs:
+            self.assertGreater(abs(item["shap_value"]), 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()

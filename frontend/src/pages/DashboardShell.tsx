@@ -407,24 +407,41 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                 </div>
               </div>
 
-              {/* STAGE 6 TASK 3: Truthful SHAP Tree Feature Explainability Breakdown */}
+              {/* STAGE 6.1 TASK 2: Semantically Accurate SHAP Tree Feature Explainability Breakdown */}
               <div className="p-4 rounded-xl bg-surface-elevated/40 border border-border/80 space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-border/60 gap-1">
                   <div>
                     <span className="text-xs font-bold uppercase tracking-wider text-slate-200 flex items-center space-x-1.5">
                       <Sparkles className="w-3.5 h-3.5 text-primary-400" />
-                      <span>Contributing Behavioral Features (Non-Zero SHAP Values)</span>
+                      <span>Contributing Behavioral Features (SHAP Model Attributions)</span>
                     </span>
                     <p className="text-[10px] text-slate-400 mt-0.5">
                       SHAP values represent tree-split contributions to the model&apos;s log-odds score, not causal proof of user identity or intent.
                     </p>
                   </div>
-                  <span className="text-[10px] font-mono text-slate-400 shrink-0">
-                    Non-Zero Contributors: {nonzeroContribs.length}
-                  </span>
+                  {explanationData && explanationData.ml_inference?.status === 'available' && (
+                    <span className="text-[10px] font-mono text-slate-400 shrink-0">
+                      Non-Zero Contributors: {nonzeroContribs.length}
+                    </span>
+                  )}
                 </div>
 
-                {nonzeroContribs.length > 0 ? (
+                {/* State 1: Explanation not yet loaded */}
+                {inspectLoading ? (
+                  <div className="p-4 rounded-lg bg-surface/60 border border-border/50 text-slate-400 text-xs flex items-center space-x-2">
+                    <Loader2 className="w-4 h-4 text-primary-400 animate-spin shrink-0" />
+                    <span>Loading feature explanations...</span>
+                  </div>
+                ) : !explanationData || explanationData.ml_inference?.status !== 'available' ? (
+                  /* State 2: Explanation unavailable or failed */
+                  <div className="p-3.5 rounded-lg bg-surface/60 border border-border/50 text-slate-400 text-xs flex items-center space-x-2">
+                    <HelpCircle className="w-4 h-4 text-slate-500 shrink-0" />
+                    <span>
+                      Explanation data is unavailable for this session.
+                    </span>
+                  </div>
+                ) : nonzeroContribs.length > 0 ? (
+                  /* State 3: Non-zero attribution available */
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                     {nonzeroContribs.map((feat, idx) => {
                       const isPositive = feat.shap_value >= 0;
@@ -461,10 +478,11 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                     })}
                   </div>
                 ) : (
+                  /* State 4: Valid explanation with all-zero feature contributions */
                   <div className="p-3.5 rounded-lg bg-surface/60 border border-border/50 text-slate-400 text-xs flex items-center space-x-2">
                     <HelpCircle className="w-4 h-4 text-slate-500 shrink-0" />
                     <span>
-                      No individual behavioral feature exerted a non-zero attribution on this prediction. The model traversed default tree leaves, or explanation telemetry is unavailable for this session.
+                      No individual feature has a non-zero attribution for this prediction.
                     </span>
                   </div>
                 )}

@@ -229,24 +229,35 @@ export const SessionAnalysisModal: React.FC<SessionAnalysisModalProps> = ({
             </div>
           </div>
 
-          {/* STAGE 6 TASK 3: Truthful SHAP Explanations */}
+          {/* STAGE 6.1 TASK 2: Semantically Accurate SHAP Explanations */}
           <div className="space-y-2.5">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center space-x-1.5">
                   <BarChart2 className="w-4 h-4 text-purple-600" />
-                  <span>Genuine Non-Zero Contributing Features</span>
+                  <span>Contributing Behavioral Features (SHAP Model Attributions)</span>
                 </h4>
                 <p className="text-[10px] text-slate-500">
                   SHAP values represent tree-split contributions to the model&apos;s log-odds score, not causal proof of user identity or intent.
                 </p>
               </div>
-              <span className="text-[10px] text-slate-400 font-mono shrink-0">
-                Non-Zero: {nonzeroContributions.length}
-              </span>
+              {explanationData && explanationData.ml_inference?.status === 'available' && (
+                <span className="text-[10px] text-slate-400 font-mono shrink-0">
+                  Non-Zero Contributors: {nonzeroContributions.length}
+                </span>
+              )}
             </div>
 
-            {nonzeroContributions.length > 0 ? (
+            {!explanationData || explanationData.ml_inference?.status !== 'available' ? (
+              /* State 2: Explanation unavailable or failed */
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/70 text-slate-500 text-xs flex items-center space-x-2">
+                <HelpCircle className="w-4 h-4 text-slate-400 shrink-0" />
+                <span>
+                  Explanation data is unavailable for this session.
+                </span>
+              </div>
+            ) : nonzeroContributions.length > 0 ? (
+              /* State 1: Non-zero attribution available */
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                 {nonzeroContributions.map((feat, idx) => {
                   const isPositive = feat.shap_value >= 0;
@@ -283,10 +294,11 @@ export const SessionAnalysisModal: React.FC<SessionAnalysisModalProps> = ({
                 })}
               </div>
             ) : (
+              /* State 3: Valid explanation with all-zero feature contributions */
               <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/70 text-slate-500 text-xs flex items-center space-x-2">
                 <HelpCircle className="w-4 h-4 text-slate-400 shrink-0" />
                 <span>
-                  No individual behavioral feature exerted a non-zero SHAP attribution on this prediction. The model traversed default tree leaves, or explanation telemetry is unavailable.
+                  No individual feature has a non-zero attribution for this prediction.
                 </span>
               </div>
             )}
