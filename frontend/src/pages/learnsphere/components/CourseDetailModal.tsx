@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, Star, Clock, CheckCircle, Sparkles, Loader2 } from 'lucide-react';
-import { CourseItem, CourseDetailResponse, EnrollmentResponse } from '../../../types';
+import { X, Star, Clock, CheckCircle, Loader2, Play } from 'lucide-react';
+import { CourseItem, CourseDetailResponse } from '../../../types';
 import { AppApiClient } from '../../../services/api';
 import { CourseThumbnail } from './CourseThumbnails';
 
@@ -8,12 +8,14 @@ interface CourseDetailModalProps {
   course: CourseItem | null;
   onClose: () => void;
   appClient: AppApiClient;
+  onStartLearning?: (course: CourseItem, lessonId?: string) => void;
 }
 
 export const CourseDetailModal: React.FC<CourseDetailModalProps> = ({
   course,
   onClose,
   appClient,
+  onStartLearning,
 }) => {
   const [details, setDetails] = useState<CourseDetailResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -94,20 +96,6 @@ export const CourseDetailModal: React.FC<CourseDetailModalProps> = ({
             </div>
           ) : details ? (
             <>
-              {/* Enrollment Banner if already enrolled */}
-              {enrollmentResult && (
-                <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-start space-x-3 text-emerald-800">
-                  <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="text-sm font-bold">Enrollment Confirmed!</h4>
-                    <p className="text-xs text-emerald-700 mt-0.5">{enrollmentResult.message}</p>
-                    <span className="text-[10px] font-mono text-emerald-600 mt-1 block">
-                      Ref: {enrollmentResult.enrollment_id} • Plan: {enrollmentResult.plan_type}
-                    </span>
-                  </div>
-                </div>
-              )}
-
               {/* Course Meta Cards */}
               <div className="grid grid-cols-3 gap-3">
                 <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex flex-col">
@@ -171,7 +159,10 @@ export const CourseDetailModal: React.FC<CourseDetailModalProps> = ({
                   {details.lessons.map((lesson) => (
                     <div
                       key={lesson.id}
-                      className="p-3 rounded-xl border border-slate-100 hover:border-purple-200 bg-slate-50/50 hover:bg-white transition-all flex items-center justify-between"
+                      onClick={() => onStartLearning && onStartLearning(course, lesson.id)}
+                      className={`p-3 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-white transition-all flex items-center justify-between ${
+                        onStartLearning ? 'cursor-pointer hover:border-purple-300 hover:shadow-sm' : ''
+                      }`}
                     >
                       <div className="flex items-center space-x-3">
                         <div className="w-7 h-7 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center text-xs font-bold">
@@ -190,6 +181,11 @@ export const CourseDetailModal: React.FC<CourseDetailModalProps> = ({
                             Quiz
                           </span>
                         )}
+                        {onStartLearning && (
+                          <span className="text-purple-600 font-bold text-xs pl-1">
+                            Play →
+                          </span>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -204,44 +200,31 @@ export const CourseDetailModal: React.FC<CourseDetailModalProps> = ({
           <div className="flex items-center space-x-2">
             <span className="text-xs text-slate-500">Instructor:</span>
             <span className="text-xs font-bold text-slate-800">{course.instructor}</span>
+            <span className="text-[11px] text-purple-600 font-semibold px-2.5 py-0.5 rounded-full bg-purple-50 border border-purple-100">
+              Syllabus Preview Mode
+            </span>
           </div>
 
           <div className="flex items-center space-x-3">
             <button
               onClick={onClose}
-              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 transition-colors"
+              className="px-4 py-2.5 rounded-full text-xs font-bold bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 shadow-sm transition-all cursor-pointer"
             >
-              Close
+              Close Preview
             </button>
-            <button
-              onClick={handleEnroll}
-              disabled={enrolling || !!enrollmentResult}
-              className={`px-5 py-2.5 rounded-full text-xs font-bold shadow-md transition-all inline-flex items-center space-x-1.5 ${
-                enrollmentResult
-                  ? 'bg-emerald-600 text-white cursor-default'
-                  : 'bg-[#6941C6] hover:bg-[#53389E] text-white shadow-purple-600/20 hover:shadow-lg cursor-pointer'
-              }`}
-            >
-              {enrolling ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Enrolling...</span>
-                </>
-              ) : enrollmentResult ? (
-                <>
-                  <CheckCircle className="w-3.5 h-3.5" />
-                  <span>Enrolled (Active)</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>{course.is_free ? 'Enroll for Free' : `Enroll Now ($${course.price.toFixed(2)})`}</span>
-                </>
-              )}
-            </button>
+            {onStartLearning && (
+              <button
+                onClick={() => onStartLearning(course, details?.lessons[0]?.id)}
+                className="px-5 py-2.5 rounded-full text-xs font-bold bg-[#6941C6] hover:bg-[#53389E] text-white shadow-md shadow-purple-600/20 hover:shadow-lg transition-all cursor-pointer flex items-center space-x-1.5"
+              >
+                <Play className="w-3.5 h-3.5 fill-white" />
+                <span>Start Learning</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
     </div>
   );
 };
+

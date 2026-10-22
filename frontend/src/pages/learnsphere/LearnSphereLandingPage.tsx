@@ -7,7 +7,8 @@ import { StatsGrid } from './components/StatsGrid';
 import { LearningChart } from './components/LearningChart';
 import { PromoCard } from './components/PromoCard';
 import { CourseDetailModal } from './components/CourseDetailModal';
-import { CourseItem } from '../../types';
+import { LessonPlayerView } from './components/LessonPlayerView';
+import { CourseItem, LearnerProgressState, QuizAttempt } from '../../types';
 import { AppApiClient } from '../../services/api';
 import { ChevronLeft, ChevronRight, Loader2, BookOpen } from 'lucide-react';
 
@@ -26,6 +27,12 @@ export const LearnSphereLandingPage: React.FC<LearnSphereLandingPageProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>('All');
   const [selectedCourse, setSelectedCourse] = useState<CourseItem | null>(null);
+
+  // Lesson player view & session-local progress state
+  const [activeView, setActiveView] = useState<'catalog' | 'player'>('catalog');
+  const [playerCourse, setPlayerCourse] = useState<CourseItem | null>(null);
+  const [playerLessonId, setPlayerLessonId] = useState<string | undefined>(undefined);
+  const [learnerProgress, setLearnerProgress] = useState<LearnerProgressState>({});
 
   // Carousel page state for Popular Courses section
   const [popularCarouselIndex, setPopularCarouselIndex] = useState<number>(0);
@@ -104,6 +111,76 @@ export const LearnSphereLandingPage: React.FC<LearnSphereLandingPageProps> = ({
       setSelectedCourse(courses[0]);
     }
   };
+
+  const handleStartLearning = (course: CourseItem, lessonId?: string) => {
+    setPlayerCourse(course);
+    setPlayerLessonId(lessonId);
+    setSelectedCourse(null);
+    setActiveView('player');
+  };
+
+  const handleBackToCatalog = () => {
+    setActiveView('catalog');
+  };
+
+  const handleToggleCompleteLesson = (courseId: string, lessonId: string) => {
+    setLearnerProgress((prev) => {
+      const currentRecord = prev[courseId] || { completedLessonIds: [], quizAttempts: {} };
+      const isCompleted = currentRecord.completedLessonIds.includes(lessonId);
+      const updatedCompletedIds = isCompleted
+        ? currentRecord.completedLessonIds.filter((id) => id !== lessonId)
+        : [...currentRecord.completedLessonIds, lessonId];
+
+      return {
+        ...prev,
+        [courseId]: {
+          ...currentRecord,
+          completedLessonIds: updatedCompletedIds,
+        },
+      };
+    });
+  };
+
+  const handleRecordQuizAttempt = (courseId: string, attempt: QuizAttempt) => {
+    setLearnerProgress((prev) => {
+      const currentRecord = prev[courseId] || { completedLessonIds: [], quizAttempts: {} };
+      return {
+        ...prev,
+        [courseId]: {
+          ...currentRecord,
+          quizAttempts: {
+            ...currentRecord.quizAttempts,
+            [attempt.lessonId]: attempt,
+          },
+        },
+      };
+    });
+  };
+
+  if (activeView === 'player' && playerCourse) {
+    return (
+      <>
+        <LessonPlayerView
+          course={playerCourse}
+          initialLessonId={playerLessonId}
+          appClient={appClient}
+          progressRecord={learnerProgress[playerCourse.id]}
+          onToggleCompleteLesson={handleToggleCompleteLesson}
+          onRecordQuizAttempt={handleRecordQuizAttempt}
+          onBackToCatalog={handleBackToCatalog}
+          onOpenCourseDetails={() => setSelectedCourse(playerCourse)}
+        />
+        {selectedCourse && (
+          <CourseDetailModal
+            course={selectedCourse}
+            onClose={() => setSelectedCourse(null)}
+            appClient={appClient}
+            onStartLearning={handleStartLearning}
+          />
+        )}
+      </>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#ECEAF6] p-2.5 sm:p-5 lg:p-7 relative overflow-x-hidden flex justify-center items-start font-sans">
@@ -239,6 +316,7 @@ export const LearnSphereLandingPage: React.FC<LearnSphereLandingPageProps> = ({
           course={selectedCourse}
           onClose={() => setSelectedCourse(null)}
           appClient={appClient}
+          onStartLearning={handleStartLearning}
         />
       )}
     </div>

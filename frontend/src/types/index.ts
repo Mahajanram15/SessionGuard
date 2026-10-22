@@ -209,4 +209,24 @@ export interface EnrollmentResponse {
   message: string;
 }
 
+// ------------------------------------------------------------------------------
+// Student Progress State Types (Session-Local Demo)
+// ------------------------------------------------------------------------------
+
+export interface QuizAttempt {
+  lessonId: string;
+  score: number;
+  totalQuestions: number;
+  passed: boolean;
+  completedAt: string;
+}
+
+export interface CourseProgressRecord {
+  completedLessonIds: string[];
+  quizAttempts: Record<string, QuizAttempt>;
+}
+
+export type LearnerProgressState = Record<string, CourseProgressRecord>;
+
+
 
