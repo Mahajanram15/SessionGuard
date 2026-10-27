@@ -99,7 +99,7 @@ export class BehavioralSDK {
    * Initializes or binds a session with the backend API gateway.
    */
   public async startSession(options?: SessionStartOptions): Promise<string> {
-    if (this.isRunning && this.sessionId) {
+    if (this.sessionId) {
       return this.sessionId;
     }
 

@@ -224,15 +224,16 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                   setInspectSessionId(item.session_id);
                   handleInspectSession(item.session_id);
                 }}
+                title={item.session_id}
                 className={`text-[11px] font-mono px-2.5 py-1 rounded-md border transition-all cursor-pointer flex items-center space-x-1.5 ${
                   inspectSessionId === item.session_id
                     ? 'bg-primary-500/20 border-primary-500/50 text-primary-200'
                     : 'bg-surface-elevated/60 border-border/60 text-slate-300 hover:border-primary-500/40'
                 }`}
               >
-                <span>{item.session_id.substring(0, 16)}...</span>
+                <span className="break-all">{item.session_id}</span>
                 <span
-                  className={`text-[9px] px-1 py-0.2 rounded font-bold ${
+                  className={`text-[9px] px-1 py-0.2 rounded font-bold shrink-0 ${
                     item.decision === 'BLOCK'
                       ? 'bg-rose-500/20 text-rose-300'
                       : item.decision === 'CHALLENGE'

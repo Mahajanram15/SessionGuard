@@ -48,6 +48,25 @@ export const App: React.FC = () => {
     });
   }, [sdk, refreshSdkStats]);
 
+  // Reusable callback to refresh system dashboard stats from backend
+  const refreshDashboardStats = useCallback(async () => {
+    try {
+      const statsData = await apiClient.getDashboardStats();
+      if (statsData) {
+        setStats(statsData);
+      }
+    } catch (err) {
+      console.error('Failed to refresh dashboard stats:', err);
+    }
+  }, []);
+
+  // Refresh dashboard stats whenever switching to the System Matrix overview tab
+  useEffect(() => {
+    if (activeTab === 'overview') {
+      refreshDashboardStats();
+    }
+  }, [activeTab, refreshDashboardStats]);
+
   useEffect(() => {
     async function loadInitialData() {
       try {
@@ -105,6 +124,7 @@ export const App: React.FC = () => {
             sdk={sdk}
             stats={sdkStats}
             onRefreshStats={refreshSdkStats}
+            onRefreshDashboardStats={refreshDashboardStats}
             onExploreCatalog={() => setActiveTab('learnsphere')}
             onNavigateToMatrix={() => setActiveTab('overview')}
           />

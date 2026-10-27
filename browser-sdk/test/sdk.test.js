@@ -298,3 +298,57 @@ test('6. Sequential session lifecycle: single SDK instance resets session ID and
   assert.equal(ingestedBatches[0].session_id, 'sess_seq_1');
   assert.equal(ingestedBatches[1].session_id, 'sess_seq_2');
 });
+
+test('7. Duplicate session prevention: startSession() followed by start() reuses bound session ID', async () => {
+  let sessionCounter = 0;
+  const createdSessions = [];
+
+  globalThis.fetch = async (url) => {
+    if (url.includes('/session/start')) {
+      sessionCounter++;
+      const sessId = `sess_dup_check_${sessionCounter}`;
+      createdSessions.push(sessId);
+      return {
+        ok: true,
+        json: async () => ({
+          session_id: sessId,
+          status: 'ACTIVE',
+          start_time: new Date().toISOString(),
+        }),
+      };
+    }
+    if (url.includes('/session/end')) {
+      return {
+        ok: true,
+        json: async () => ({ session_id: 'test', status: 'COMPLETED' }),
+      };
+    }
+    return { ok: true, json: async () => ({}) };
+  };
+
+  const sdk = new BehavioralSDK({
+    apiBaseUrl: 'http://localhost:8000/api',
+    debug: false,
+  });
+
+  // Call startSession then start
+  const sId1 = await sdk.startSession({ collectionMode: 'AUTOMATED', taskId: 'TASK_LEARN_AUTOMATION', label: 1 });
+  assert.equal(sId1, 'sess_dup_check_1');
+  assert.equal(sdk.getSessionId(), 'sess_dup_check_1');
+
+  // Starting when already bound should NOT issue a second POST /session/start
+  await sdk.start({ collectionMode: 'AUTOMATED', taskId: 'TASK_LEARN_AUTOMATION', label: 1 });
+  assert.equal(sdk.getSessionId(), 'sess_dup_check_1');
+  assert.deepEqual(createdSessions, ['sess_dup_check_1'], 'Must only create ONE session on backend');
+
+  await sdk.stop('SIMULATION_DONE');
+  assert.equal(sdk.getSessionId(), null);
+
+  // Subsequent start after stop creates fresh session
+  await sdk.start({ collectionMode: 'AUTOMATED', taskId: 'TASK_LEARN_AUTOMATION', label: 1 });
+  assert.equal(sdk.getSessionId(), 'sess_dup_check_2');
+  assert.deepEqual(createdSessions, ['sess_dup_check_1', 'sess_dup_check_2']);
+
+  await sdk.stop('CLEANUP');
+});
+

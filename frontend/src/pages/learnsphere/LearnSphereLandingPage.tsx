@@ -30,6 +30,7 @@ interface LearnSphereLandingPageProps {
   sdk?: BehavioralSDK;
   stats?: TelemetryStats;
   onRefreshStats?: () => void;
+  onRefreshDashboardStats?: () => Promise<void> | void;
   onExploreCatalog?: () => void;
   onNavigateToMatrix?: () => void;
 }
@@ -39,6 +40,7 @@ export const LearnSphereLandingPage: React.FC<LearnSphereLandingPageProps> = ({
   sdk,
   stats,
   onRefreshStats,
+  onRefreshDashboardStats,
   onExploreCatalog: _onExploreCatalog,
   onNavigateToMatrix,
 }) => {
@@ -229,14 +231,14 @@ export const LearnSphereLandingPage: React.FC<LearnSphereLandingPageProps> = ({
     setSessionActionLoading(true);
     setSessionNotice(null);
     try {
-      const sId = await sdk.startSession({
-        collectionMode: 'HUMAN',
-        taskId: 'TASK_LEARN_MANUAL',
-      });
       await sdk.start({
         collectionMode: 'HUMAN',
         taskId: 'TASK_LEARN_MANUAL',
       });
+      const sId = sdk.getSessionId();
+      if (!sId) {
+        throw new Error('SDK failed to initialize or bind a session ID for manual session.');
+      }
       onRefreshStats?.();
       setSessionNotice(`Manual session active (${sId.substring(0, 16)}...). Telemetry is capturing as you learn.`);
     } catch (err: any) {
@@ -271,6 +273,12 @@ export const LearnSphereLandingPage: React.FC<LearnSphereLandingPageProps> = ({
       setAnalyzedExplanationData(explRes);
       setAnalysisModalOpen(true);
       setSessionNotice(null);
+
+      try {
+        await onRefreshDashboardStats?.();
+      } catch (statsErr) {
+        console.error('Failed to refresh dashboard stats after session completion:', statsErr);
+      }
     } catch (err: any) {
       console.error('Failed to evaluate session:', err);
       setSessionNotice(`Failed to evaluate session: ${err?.message || err}`);
@@ -284,18 +292,16 @@ export const LearnSphereLandingPage: React.FC<LearnSphereLandingPageProps> = ({
     setSessionActionLoading(true);
     setSessionNotice('Running controlled synthetic bot simulation against LearnSphere...');
     try {
-      const sId = await sdk.startSession({
-        collectionMode: 'AUTOMATED',
-        automationCondition: 'AUTOMATED_DETERMINISTIC',
-        taskId: 'TASK_LEARN_AUTOMATION',
-        label: 1,
-      });
       await sdk.start({
         collectionMode: 'AUTOMATED',
         automationCondition: 'AUTOMATED_DETERMINISTIC',
         taskId: 'TASK_LEARN_AUTOMATION',
         label: 1,
       });
+      const boundSessionId = sdk.getSessionId();
+      if (!boundSessionId) {
+        throw new Error('SDK failed to initialize or bind a session ID for synthetic simulation.');
+      }
       onRefreshStats?.();
 
       const baseT = Date.now();
@@ -384,17 +390,23 @@ export const LearnSphereLandingPage: React.FC<LearnSphereLandingPageProps> = ({
       onRefreshStats?.();
 
       const [riskRes, explRes] = await Promise.all([
-        apiClient.getRiskScore(sId),
-        apiClient.getExplanation(sId),
+        apiClient.getRiskScore(boundSessionId),
+        apiClient.getExplanation(boundSessionId),
       ]);
 
-      setAnalyzedSessionId(sId);
+      setAnalyzedSessionId(boundSessionId);
       setAnalyzedScenarioType('synthetic_automation');
       setAnalyzedEventCount(endRes?.total_events_captured ?? 25);
       setAnalyzedRiskData(riskRes);
       setAnalyzedExplanationData(explRes);
       setAnalysisModalOpen(true);
       setSessionNotice(null);
+
+      try {
+        await onRefreshDashboardStats?.();
+      } catch (statsErr) {
+        console.error('Failed to refresh dashboard stats after simulation completion:', statsErr);
+      }
     } catch (err: any) {
       console.error('Synthetic simulation failed:', err);
       setSessionNotice(`Synthetic simulation error: ${err?.message || err}`);

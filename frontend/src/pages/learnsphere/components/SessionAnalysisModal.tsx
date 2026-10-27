@@ -186,10 +186,27 @@ export const SessionAnalysisModal: React.FC<SessionAnalysisModalProps> = ({
 
             <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex flex-col">
               <span className="text-[10px] text-slate-400 font-semibold uppercase">Feature Extraction</span>
-              <span className="text-xs font-bold text-emerald-700 mt-1 flex items-center space-x-1 font-mono">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                <span>64 Features Ready</span>
-              </span>
+              {ml?.status === 'available' ? (
+                <span className="text-xs font-bold text-emerald-700 mt-1 flex items-center space-x-1 font-mono">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>64 Features Ready</span>
+                </span>
+              ) : ml?.status === 'prediction_not_ready' ? (
+                <span className="text-xs font-bold text-amber-700 mt-1 flex items-center space-x-1 font-mono">
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Finalization Pending</span>
+                </span>
+              ) : ml?.status === 'insufficient_telemetry' ? (
+                <span className="text-xs font-bold text-rose-700 mt-1 flex items-center space-x-1 font-mono">
+                  <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                  <span>Insufficient Events</span>
+                </span>
+              ) : (
+                <span className="text-xs font-bold text-slate-500 mt-1 flex items-center space-x-1 font-mono">
+                  <HelpCircle className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Features Unavailable</span>
+                </span>
+              )}
             </div>
 
             <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex flex-col">
