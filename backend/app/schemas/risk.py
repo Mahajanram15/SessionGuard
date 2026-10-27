@@ -21,6 +21,12 @@ class ModelInferenceDetail(BaseModel):
     status: Literal["available", "unavailable", "prediction_not_ready", "insufficient_telemetry"] = Field(
         ..., description="Availability status of the ML inference subsystem"
     )
+    active_model: Optional[str] = Field(
+        default="experiment_a", description="Active ML experiment model identifier ('experiment_a' or 'experiment_b')"
+    )
+    score_label: Optional[str] = Field(
+        default="Uncalibrated Model Score", description="Semantic label for raw model decision scores"
+    )
     model_version: Optional[str] = Field(default=None, description="Frozen model version or library tag")
     model_type: Optional[str] = Field(default=None, description="Estimator architecture")
     predicted_class: Optional[Literal["HUMAN", "AUTOMATED"]] = Field(default=None, description="Predicted class label")

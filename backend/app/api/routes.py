@@ -138,10 +138,29 @@ async def get_session_explanation(session_id: str):
 @router.get("/model/status", status_code=status.HTTP_200_OK)
 async def get_model_status():
     """
-    Returns the operational status, version, and integrity digest of the frozen ML model.
+    Returns the operational status, active model, version, and integrity digest.
     """
     from backend.app.services.ml_inference_service import ml_inference_service
     return ml_inference_service.get_status()
+
+from pydantic import BaseModel, Field
+
+class ModelSelectPayload(BaseModel):
+    model: str = Field(default="experiment_a", description="Model identifier ('experiment_a' or 'experiment_b')")
+
+@router.post("/model/select", status_code=status.HTTP_200_OK)
+async def select_model(payload: ModelSelectPayload):
+    """
+    Reversibly selects the active ML model ('experiment_a' or 'experiment_b').
+    Strictly defaults to 'experiment_a' when the payload is absent, invalid, or unset.
+    """
+    from backend.app.services.ml_inference_service import ml_inference_service
+    active = ml_inference_service.set_active_model(payload.model)
+    return {
+        "status": "success",
+        "active_model": active,
+        "model_status": ml_inference_service.get_status(),
+    }
 
 # ------------------------------------------------------------------------------
 # 4. Security Dashboard Endpoints

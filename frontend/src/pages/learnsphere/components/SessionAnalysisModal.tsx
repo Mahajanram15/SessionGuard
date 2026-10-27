@@ -40,6 +40,7 @@ export const SessionAnalysisModal: React.FC<SessionAnalysisModalProps> = ({
   const isAutomatedPredicted = ml?.predicted_class === 'AUTOMATED';
   const probAuto = ml?.probability_automated !== undefined ? ml.probability_automated : null;
   const probHuman = ml?.probability_human !== undefined ? ml.probability_human : null;
+  const isExpB = ml?.active_model === 'experiment_b';
 
   // Genuine non-zero SHAP contributors only (Task 3)
   const nonzeroContributions =
@@ -83,19 +84,34 @@ export const SessionAnalysisModal: React.FC<SessionAnalysisModalProps> = ({
         {/* Modal Body */}
         <div className="p-6 overflow-y-auto flex-1 space-y-5">
           {/* STAGE 6 TASK 2: Clear Model Limitation Notice */}
-          <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-900 space-y-2">
-            <div className="flex items-center space-x-2 text-amber-800 font-bold text-xs uppercase tracking-wider">
-              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-              <span>Model Limitation &amp; Demonstration Notice</span>
+          {isExpB ? (
+            <div className="p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-950 space-y-2">
+              <div className="flex items-center space-x-2 text-indigo-800 font-bold text-xs uppercase tracking-wider">
+                <AlertTriangle className="w-4 h-4 text-indigo-600 shrink-0" />
+                <span>Experiment B (Kinematic Classifier) Demonstration Notice</span>
+              </div>
+              <p className="text-xs leading-relaxed text-indigo-950">
+                This candidate model evaluates <strong className="font-mono font-bold">12 scale-free kinematic features</strong> (trajectory straightness, velocity dispersion, angular deviation, acceleration moments) and completely excludes event counts and session duration shortcuts.
+              </p>
+              <p className="text-[11px] leading-relaxed text-indigo-800/90">
+                <strong>Model Limitation:</strong> Reported scores are uncalibrated decision risk scores, not verified statistical probabilities. Candidate Experiment B has only been validated against the current synthetic bot profiles and requires broader human baseline studies before operational deployment.
+              </p>
             </div>
-            <p className="text-xs leading-relaxed text-amber-900">
-              This frozen Experiment A demonstration model relies overwhelmingly on{' '}
-              <strong className="font-mono font-bold">mouse_event_count</strong> (all 35 decision tree splits trigger at &lt; 72 samples). Short demonstration sessions are classified as automated regardless of other behavioral differences (such as natural velocity variance or typing cadence).
-            </p>
-            <p className="text-[11px] leading-relaxed text-amber-800/90">
-              The reported probability is a raw model output, not a verified probability that a person is a bot. The model is a pilot artifact and is not production-ready for operational security enforcement without broader, independently validated data.
-            </p>
-          </div>
+          ) : (
+            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-900 space-y-2">
+              <div className="flex items-center space-x-2 text-amber-800 font-bold text-xs uppercase tracking-wider">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>Model Limitation &amp; Demonstration Notice</span>
+              </div>
+              <p className="text-xs leading-relaxed text-amber-900">
+                This frozen Experiment A demonstration model relies overwhelmingly on{' '}
+                <strong className="font-mono font-bold">mouse_event_count</strong> (all 35 decision tree splits trigger at &lt; 72 samples). Short demonstration sessions are classified as automated regardless of other behavioral differences (such as natural velocity variance or typing cadence).
+              </p>
+              <p className="text-[11px] leading-relaxed text-amber-800/90">
+                The reported score is an uncalibrated raw model output, not a verified probability that a person is a bot. The model is a pilot artifact and is not production-ready for operational security enforcement without broader, independently validated data.
+              </p>
+            </div>
+          )}
 
           {/* STAGE 6 TASK 4: Separate Intended Scenario from Model Prediction */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
@@ -141,7 +157,7 @@ export const SessionAnalysisModal: React.FC<SessionAnalysisModalProps> = ({
             <div className="p-4 rounded-2xl bg-slate-900 text-white flex flex-col justify-between space-y-2 shadow-sm">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                  2. Frozen Model Output
+                  {isExpB ? '2. Candidate Exp B (Kinematic) Output' : '2. Frozen Exp A (Count Baseline) Output'}
                 </span>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-slate-300 font-mono">
                   Threshold: {ml?.decision_threshold?.toFixed(2) || '0.50'}
@@ -158,19 +174,19 @@ export const SessionAnalysisModal: React.FC<SessionAnalysisModalProps> = ({
                   {ml?.predicted_class || 'UNKNOWN'}
                 </span>
                 <div className="text-xs font-mono text-slate-300">
-                  <span>P(Auto): </span>
+                  <span>{isExpB ? 'Kinematic Risk (Auto): ' : 'Uncalibrated Score (Auto): '}</span>
                   <span className="font-bold text-rose-400">
                     {probAuto !== null ? `${(probAuto * 100).toFixed(1)}%` : 'N/A'}
                   </span>
                   <span className="mx-1.5 text-slate-500">|</span>
-                  <span>P(Human): </span>
+                  <span>{isExpB ? 'Kinematic Risk (Human): ' : 'Uncalibrated Score (Human): '}</span>
                   <span className="font-bold text-emerald-400">
                     {probHuman !== null ? `${(probHuman * 100).toFixed(1)}%` : 'N/A'}
                   </span>
                 </div>
               </div>
               <p className="text-[10px] text-slate-400 pt-1 border-t border-white/10 leading-tight">
-                <strong>Independent Output:</strong> Computed strictly on the 64-feature vector. It is not inferred from or linked to the test scenario metadata.
+                <strong>Independent Output:</strong> Computed strictly on the {isExpB ? '12 kinematic features' : '64-feature vector'}. It is not inferred from or linked to test scenario metadata.
               </p>
             </div>
           </div>
@@ -189,7 +205,7 @@ export const SessionAnalysisModal: React.FC<SessionAnalysisModalProps> = ({
               {ml?.status === 'available' ? (
                 <span className="text-xs font-bold text-emerald-700 mt-1 flex items-center space-x-1 font-mono">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>64 Features Ready</span>
+                  <span>{isExpB ? '12 Kinematic Features Ready' : '64 Features Ready'}</span>
                 </span>
               ) : ml?.status === 'prediction_not_ready' ? (
                 <span className="text-xs font-bold text-amber-700 mt-1 flex items-center space-x-1 font-mono">
@@ -212,7 +228,7 @@ export const SessionAnalysisModal: React.FC<SessionAnalysisModalProps> = ({
             <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex flex-col">
               <span className="text-[10px] text-slate-400 font-semibold uppercase">Model Version</span>
               <span className="text-xs font-bold text-slate-800 mt-1 font-mono truncate">
-                {ml?.model_version || 'expA (XGBoost)'}
+                {ml?.model_version || (isExpB ? '1.0.0-candidate (Exp B)' : '3.4.1 (Exp A)')}
               </span>
             </div>
           </div>
@@ -246,26 +262,35 @@ export const SessionAnalysisModal: React.FC<SessionAnalysisModalProps> = ({
             </div>
           </div>
 
-          {/* STAGE 6.1 TASK 2: Semantically Accurate SHAP Explanations */}
+          {/* STAGE 6.1 TASK 2: Semantically Accurate Explanations */}
           <div className="space-y-2.5">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center space-x-1.5">
                   <BarChart2 className="w-4 h-4 text-purple-600" />
-                  <span>Contributing Behavioral Features (SHAP Model Attributions)</span>
+                  <span>{isExpB ? 'Contributing Behavioral Features (Experiment B Attribution)' : 'Contributing Behavioral Features (SHAP Model Attributions)'}</span>
                 </h4>
                 <p className="text-[10px] text-slate-500">
-                  SHAP values represent tree-split contributions to the model&apos;s log-odds score, not causal proof of user identity or intent.
+                  {isExpB
+                    ? 'Experiment B feature evaluations are based on scale-free kinematic trajectories. Tree SHAP is suppressed to avoid attribution leakage.'
+                    : 'SHAP values represent tree-split contributions to the model\'s log-odds score, not causal proof of user identity or intent.'}
                 </p>
               </div>
-              {explanationData && explanationData.ml_inference?.status === 'available' && (
+              {explanationData && explanationData.ml_inference?.status === 'available' && !isExpB && (
                 <span className="text-[10px] text-slate-400 font-mono shrink-0">
                   Non-Zero Contributors: {nonzeroContributions.length}
                 </span>
               )}
             </div>
 
-            {!explanationData || explanationData.ml_inference?.status !== 'available' ? (
+            {isExpB ? (
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/70 text-slate-600 text-xs flex items-center space-x-2">
+                <HelpCircle className="w-4 h-4 text-purple-500 shrink-0" />
+                <span>
+                  Feature attribution explanations are not currently supported for Experiment B (Kinematic Classifier). Experiment A tree SHAP values are intentionally suppressed to prevent cross-model attribution leakage.
+                </span>
+              </div>
+            ) : !explanationData || explanationData.ml_inference?.status !== 'available' ? (
               /* State 2: Explanation unavailable or failed */
               <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/70 text-slate-500 text-xs flex items-center space-x-2">
                 <HelpCircle className="w-4 h-4 text-slate-400 shrink-0" />

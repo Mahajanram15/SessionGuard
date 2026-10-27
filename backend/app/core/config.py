@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     FASTTEXT_MODEL_PATH: str = "ml/models/fasttext_api.bin"
     FAISS_INDEX_PATH: str = "ml/models/faiss_endpoints.index"
     MARKOV_MODEL_PATH: str = "ml/models/markov_transitions.pkl"
+    ACTIVE_MODEL: str = "experiment_a"
+    CROSSTRACE_ACTIVE_MODEL: str = "experiment_a"
 
     # Security Thresholds
     RISK_THRESHOLD_ALLOW: float = 0.35

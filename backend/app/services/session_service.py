@@ -392,6 +392,8 @@ class SessionService:
                         session["ml_prediction"] = pred_res
                     ml_inference_detail = ModelInferenceDetail(
                         status="available",
+                        active_model=pred_res.get("active_model", "experiment_a"),
+                        score_label=pred_res.get("score_label", "Uncalibrated Model Score"),
                         model_version=pred_res.get("model_version"),
                         model_type=pred_res.get("model_type"),
                         predicted_class=pred_res.get("predicted_class"),

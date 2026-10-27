@@ -28,11 +28,12 @@ class RiskService:
         ml_inference_detail: Optional[ModelInferenceDetail] = None
 
         if ml_pred and ml_pred.get("status") == "success":
-            # Genuine ML model prediction from frozen Experiment A XGBoost model
             prob_auto = float(ml_pred["probability_automated"])
             browser_score = round(prob_auto, 3)
             ml_inference_detail = ModelInferenceDetail(
                 status="available",
+                active_model=ml_pred.get("active_model", "experiment_a"),
+                score_label=ml_pred.get("score_label", "Uncalibrated Model Score"),
                 model_version=ml_pred.get("model_version"),
                 model_type=ml_pred.get("model_type"),
                 predicted_class=ml_pred.get("predicted_class"),
@@ -44,19 +45,28 @@ class RiskService:
             )
         else:
             # Model inference not available or telemetry pending
+            active_mod = ml_inference_service.active_model
             if not ml_inference_service.is_ready:
                 inferred_status = "unavailable"
-                note = f"ML model artifact unavailable: {ml_inference_service._load_error}"
+                active_err = (
+                    ml_inference_service._load_error_b
+                    if active_mod == "experiment_b"
+                    else ml_inference_service._load_error
+                )
+                note = f"ML model artifact unavailable: {active_err}"
             elif session and session.get("status") == "ACTIVE":
                 inferred_status = "prediction_not_ready"
                 note = "Session is currently ACTIVE; full ML inference is finalized upon session completion."
             else:
                 inferred_status = "insufficient_telemetry"
-                note = "Insufficient event telemetry (<5 events) to construct 64-feature vector."
+                req_count = 12 if active_mod == "experiment_b" else 64
+                note = f"Insufficient event telemetry (<5 events) to construct {req_count}-feature vector."
 
             browser_score = 0.12  # Foundation baseline heuristic fallback
             ml_inference_detail = ModelInferenceDetail(
                 status=inferred_status,
+                active_model=active_mod,
+                score_label=ml_inference_service.score_label,
                 model_version=ml_inference_service.model_version if ml_inference_service.is_ready else None,
                 model_type=ml_inference_service.model_type if ml_inference_service.is_ready else None,
                 decision_threshold=0.50,

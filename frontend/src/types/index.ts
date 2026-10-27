@@ -18,6 +18,9 @@ export interface RiskSignals {
 
 export interface ModelInferenceDetail {
   status: 'available' | 'unavailable' | 'prediction_not_ready' | 'insufficient_telemetry';
+  active_model?: 'experiment_a' | 'experiment_b' | string;
+  score_label?: string;
+  model_name?: string;
   model_version?: string;
   model_type?: string;
   predicted_class?: 'HUMAN' | 'AUTOMATED';

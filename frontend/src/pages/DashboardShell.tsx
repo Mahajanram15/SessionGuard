@@ -362,7 +362,11 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                       </div>
 
                       <div className="flex justify-between items-center text-slate-300">
-                        <span className="text-slate-400">P(Human):</span>
+                        <span className="text-slate-400">
+                          {riskData.ml_inference.active_model === 'experiment_b'
+                            ? 'Kinematic Risk (Human):'
+                            : 'Uncalibrated Score (Human):'}
+                        </span>
                         <span className="text-emerald-400 font-bold">
                           {riskData.ml_inference.probability_human !== undefined
                             ? `${(riskData.ml_inference.probability_human * 100).toFixed(1)}%`
@@ -371,7 +375,11 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                       </div>
 
                       <div className="flex justify-between items-center text-slate-300">
-                        <span className="text-slate-400">P(Automated):</span>
+                        <span className="text-slate-400">
+                          {riskData.ml_inference.active_model === 'experiment_b'
+                            ? 'Kinematic Risk (Auto):'
+                            : 'Uncalibrated Score (Auto):'}
+                        </span>
                         <span className="text-rose-400 font-bold">
                           {riskData.ml_inference.probability_automated !== undefined
                             ? `${(riskData.ml_inference.probability_automated * 100).toFixed(1)}%`
