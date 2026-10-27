@@ -1,0 +1,125 @@
+{
+  "manifest_type": "CrossTrace Experiment B Candidate Model Manifest",
+  "model_metadata": {
+    "model_type": "sklearn.pipeline.Pipeline[StandardScaler, LogisticRegression]",
+    "model_library": "scikit-learn",
+    "model_version": "1.0.0-candidate",
+    "serialization_format": "joblib",
+    "created_at_utc": "2026-10-27T08:15:11.674303+00:00",
+    "status": "EXPERIMENTAL_CANDIDATE_MODEL",
+    "random_state": 42,
+    "hyperparameters": {
+      "C": 1.0,
+      "penalty": "l2",
+      "solver": "lbfgs",
+      "max_iter": 1000
+    }
+  },
+  "training_dataset": {
+    "path": "ml/data/features.csv",
+    "dataset_sha256": "7164c4432bfc1d0e93be0e183639faa67215e5bb5a2ee6f05565be85b668319c",
+    "total_sessions": 53,
+    "human_sessions": 23,
+    "automated_sessions": 30,
+    "partition": "phase1_baseline_development"
+  },
+  "feature_configuration": {
+    "feature_count": 12,
+    "ordered_features": [
+      "mouse_mean_velocity",
+      "mouse_std_velocity",
+      "mouse_max_velocity",
+      "mouse_mean_acceleration",
+      "mouse_std_acceleration",
+      "mouse_max_acceleration",
+      "mouse_mean_direction_change",
+      "mouse_path_straightness",
+      "mouse_mean_pause_ms",
+      "mean_flight_ms",
+      "std_flight_ms",
+      "mean_dwell_ms"
+    ],
+    "excluded_shortcuts": [
+      "mouse_event_count",
+      "total_behavior_event_count",
+      "click_count",
+      "key_event_count",
+      "scroll_event_count",
+      "navigation_count",
+      "unique_route_count",
+      "mouse_direction_change_count",
+      "mouse_pause_count",
+      "scroll_burst_count",
+      "scroll_direction_change_count",
+      "repeated_route_count",
+      "visibility_event_count",
+      "hidden_event_count",
+      "focus_event_count",
+      "blur_event_count",
+      "session_duration_ms",
+      "mouse_session_duration_ms",
+      "active_behavior_duration_ms",
+      "total_time_away_ms",
+      "mean_time_away_ms",
+      "max_time_away_ms",
+      "time_away_ratio",
+      "events_per_second",
+      "interaction_density"
+    ],
+    "scaling_applied": true,
+    "scaler_type": "StandardScaler"
+  },
+  "decision_policy": {
+    "default_decision_threshold": 0.5,
+    "label_encoding": {
+      "0": "HUMAN",
+      "1": "AUTOMATED"
+    },
+    "probability_interpretation": "Uncalibrated classification risk score. Probability calibration (Platt/Isotonic) was NOT applied due to sample size constraints."
+  },
+  "validation_summary": {
+    "loto_aggregate": {
+      "mean_balanced_accuracy": 1.0,
+      "mean_precision": 1.0,
+      "mean_recall": 1.0,
+      "mean_f1": 1.0,
+      "mean_macro_f1": 1.0,
+      "mean_roc_auc": 1.0,
+      "mean_human_fpr": 0.0,
+      "mean_automated_fpr": 0.0
+    },
+    "sgkf_aggregate": {
+      "mean_balanced_accuracy": 1.0,
+      "mean_precision": 1.0,
+      "mean_recall": 1.0,
+      "mean_f1": 1.0,
+      "mean_macro_f1": 1.0,
+      "mean_roc_auc": 1.0,
+      "mean_human_fpr": 0.0,
+      "mean_automated_fpr": 0.0
+    },
+    "feature_coefficients": {
+      "mouse_path_straightness": 0.8263,
+      "mouse_mean_direction_change": -0.7647,
+      "mouse_std_velocity": -0.6449,
+      "mouse_max_velocity": -0.6411,
+      "mouse_std_acceleration": -0.614,
+      "mouse_max_acceleration": -0.5226,
+      "mouse_mean_acceleration": -0.4921,
+      "mouse_mean_velocity": 0.3189,
+      "std_flight_ms": -0.2587,
+      "mean_flight_ms": -0.1691,
+      "mouse_mean_pause_ms": -0.1678,
+      "mean_dwell_ms": -0.0396
+    }
+  },
+  "model_artifact": {
+    "filename": "experiment_b_logistic_regression.joblib",
+    "relative_path": "ml/models/experiment_b_logistic_regression.joblib",
+    "artifact_sha256": "57d4893e18d39c340b1a4ab47d0c25aacc9b93e931bcc60bfd8e88f3363a00ff"
+  },
+  "artifact_integrity": {
+    "artifact_path": "ml/models/experiment_b_logistic_regression.joblib",
+    "artifact_sha256": "57d4893e18d39c340b1a4ab47d0c25aacc9b93e931bcc60bfd8e88f3363a00ff"
+  }
+}
