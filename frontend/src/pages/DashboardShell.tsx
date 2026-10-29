@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   ShieldCheck,
   Activity,
@@ -12,12 +12,14 @@ import {
   Info,
   Loader2,
   HelpCircle,
+  RefreshCw,
 } from 'lucide-react';
 import {
   DashboardStats,
   HealthResponse,
   RiskResponse,
   ExplanationResponse,
+  ModelStatusResponse,
 } from '../types';
 import { apiClient } from '../services/api';
 
@@ -39,6 +41,29 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   const [inspectError, setInspectError] = useState<string | null>(null);
   const [riskData, setRiskData] = useState<RiskResponse | null>(null);
   const [explanationData, setExplanationData] = useState<ExplanationResponse | null>(null);
+
+  // Globally active model status armed for upcoming inferences
+  const [modelStatus, setModelStatus] = useState<ModelStatusResponse | null>(null);
+  const [modelStatusLoading, setModelStatusLoading] = useState<boolean>(false);
+  const [modelStatusError, setModelStatusError] = useState<string | null>(null);
+
+  const fetchModelStatus = useCallback(async () => {
+    setModelStatusLoading(true);
+    setModelStatusError(null);
+    try {
+      const data = await apiClient.getModelStatus();
+      setModelStatus(data);
+    } catch (err: any) {
+      console.error('Failed to load active model status:', err);
+      setModelStatusError(err?.message || 'Failed to retrieve active model status');
+    } finally {
+      setModelStatusLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchModelStatus();
+  }, [fetchModelStatus, stats]);
 
   // If a currentSessionId is provided and none is selected yet, prefill it
   useEffect(() => {
@@ -88,9 +113,75 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
             System Matrix &amp; Behavioral Inference Dashboard
           </h1>
           <p className="text-slate-300 text-sm leading-relaxed">
-            Evaluates cross-layer consistency between browser motor dynamics and backend API telemetry.
-            Infers human vs. automated probability via frozen XGBoost inference with live SHAP explainability.
+            Evaluates cross-layer consistency between browser motor dynamics and backend API telemetry with multi-signal heuristics and behavioral machine learning inference.
           </p>
+        </div>
+      </div>
+
+      {/* Active Inference Engine Indicator (Armed for Future Sessions) */}
+      <div className="p-4 rounded-xl glass-panel border border-border/80 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-start sm:items-center space-x-3.5">
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
+            modelStatus?.active_model === 'experiment_b'
+              ? 'bg-purple-500/10 text-purple-400 border-purple-500/20'
+              : 'bg-primary-500/10 text-primary-400 border-primary-500/20'
+          }`}>
+            <Cpu className="w-5 h-5" />
+          </div>
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                Armed Inference Engine:
+              </span>
+              {modelStatusLoading ? (
+                <span className="inline-flex items-center space-x-1.5 text-xs text-slate-400 font-mono">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-primary-400" />
+                  <span>Checking engine status...</span>
+                </span>
+              ) : modelStatusError ? (
+                <span className="inline-flex items-center space-x-1 text-xs text-rose-400 font-mono">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  <span>{modelStatusError}</span>
+                </span>
+              ) : (
+                <>
+                  <span className={`px-2 py-0.5 rounded text-xs font-mono font-bold ${
+                    modelStatus?.active_model === 'experiment_b'
+                      ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                      : 'bg-primary-500/20 text-primary-300 border border-primary-500/40'
+                  }`}>
+                    {modelStatus?.active_model === 'experiment_b'
+                      ? 'Experiment B (Kinematic Candidate)'
+                      : 'Experiment A (Frozen XGBoost Baseline)'}
+                  </span>
+                  <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-surface border border-border/60 text-slate-300">
+                    v{modelStatus?.model_version || 'N/A'}
+                  </span>
+                  <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-surface border border-border/60 text-slate-300">
+                    {modelStatus?.feature_count ?? (modelStatus?.active_model === 'experiment_b' ? 12 : 64)} Features
+                  </span>
+                  <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-surface border border-border/60 text-slate-400">
+                    Score Label: <strong className="text-slate-200">{modelStatus?.score_label || 'Uncalibrated Model Score'}</strong>
+                  </span>
+                </>
+              )}
+            </div>
+            <p className="text-[11px] text-slate-400 leading-tight">
+              <strong>Future Sessions Scope:</strong> This model is armed for upcoming evaluations. Inspected historical sessions below remain immutable and display the model that analyzed them.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center space-x-2 shrink-0 self-end md:self-center">
+          <button
+            onClick={() => fetchModelStatus()}
+            disabled={modelStatusLoading}
+            className="px-2.5 py-1.5 rounded-lg bg-surface-elevated/70 hover:bg-surface-elevated border border-border/70 hover:border-border text-slate-300 hover:text-white text-xs font-mono flex items-center space-x-1.5 transition-colors disabled:opacity-50 cursor-pointer"
+            title="Refresh active model status from backend"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${modelStatusLoading ? 'animate-spin' : ''}`} />
+            <span>Refresh Engine</span>
+          </button>
         </div>
       </div>
 
@@ -176,7 +267,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                 </span>
               </h2>
               <p className="text-xs text-slate-400 font-mono mt-0.5">
-                Inspect real-time telemetry extraction, frozen XGBoost inference, and SHAP feature contributions.
+                Inspect real-time behavioral telemetry, machine learning model inference, and feature attributions.
               </p>
             </div>
           </div>
@@ -258,6 +349,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
 
         {/* Inspection Results Display */}
         {riskData && (() => {
+          const isSessionExpB = riskData.ml_inference?.active_model === 'experiment_b';
           const nonzeroContribs =
             explanationData?.shap_contributions?.filter(
               (feat) => Math.abs(feat.shap_value) >= 0.0001
@@ -266,18 +358,33 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
           return (
             <div className="space-y-4 pt-2">
               {/* STAGE 6 TASK 2: Model Limitation Notice */}
-              <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs space-y-1.5">
-                <div className="flex items-center space-x-2 text-amber-300 font-bold">
-                  <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
-                  <span className="uppercase tracking-wider">Model Limitation &amp; Demonstration Notice</span>
+              {isSessionExpB ? (
+                <div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/30 text-purple-200 text-xs space-y-1.5">
+                  <div className="flex items-center space-x-2 text-purple-300 font-bold">
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-purple-400" />
+                    <span className="uppercase tracking-wider">Experiment B (Kinematic Classifier) Demonstration Notice</span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed text-purple-100/90">
+                    This candidate model evaluates <strong className="font-mono text-white">12 scale-free kinematic features</strong> (trajectory straightness, velocity dispersion, angular deviation, acceleration moments) and completely excludes event counts and session duration shortcuts.
+                  </p>
+                  <p className="text-[11px] leading-relaxed text-purple-100/80">
+                    <strong>Model Limitation:</strong> Reported scores are uncalibrated kinematic risk scores, not verified statistical probabilities. Candidate Experiment B has only been validated against current synthetic bot profiles and requires broader human baseline studies before operational deployment.
+                  </p>
                 </div>
-                <p className="text-[11px] leading-relaxed text-amber-100/90">
-                  This frozen Experiment A demonstration model relies overwhelmingly on <strong className="font-mono text-white">mouse_event_count</strong> (all 35 decision tree splits trigger at &lt; 72 samples). Short demonstration sessions are classified as automated regardless of other behavioral differences (such as natural velocity variance or typing cadence).
-                </p>
-                <p className="text-[11px] leading-relaxed text-amber-100/80">
-                  The reported probability is a raw model output, not a verified probability that a person is a bot. The model is a pilot demonstration artifact and is not production-ready for operational security enforcement.
-                </p>
-              </div>
+              ) : (
+                <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs space-y-1.5">
+                  <div className="flex items-center space-x-2 text-amber-300 font-bold">
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
+                    <span className="uppercase tracking-wider">Model Limitation &amp; Demonstration Notice</span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed text-amber-100/90">
+                    This frozen Experiment A demonstration model relies overwhelmingly on <strong className="font-mono text-white">mouse_event_count</strong> (all 35 decision tree splits trigger at &lt; 72 samples). Short demonstration sessions are classified as automated regardless of other behavioral differences (such as natural velocity variance or typing cadence).
+                  </p>
+                  <p className="text-[11px] leading-relaxed text-amber-100/80">
+                    The reported score is an uncalibrated raw model output, not a verified probability that a person is a bot. The model is a pilot demonstration artifact and is not production-ready for operational security enforcement.
+                  </p>
+                </div>
+              )}
 
               {/* Session Metadata vs Actual ML Model Output Comparison */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -332,16 +439,16 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                   </div>
                 </div>
 
-                {/* Right Column: Frozen XGBoost Model Inference Detail */}
+                {/* Right Column: Model Inference Detail */}
                 <div className="p-4 rounded-xl bg-surface-elevated/50 border border-border/80 space-y-3">
                   <div className="flex items-center justify-between pb-2 border-b border-border/60">
                     <span className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center space-x-1.5">
                       <Cpu className="w-3.5 h-3.5 text-primary-400" />
-                      <span>Frozen XGBoost Inference</span>
+                      <span>{isSessionExpB ? 'Candidate Kinematic Inference (Exp B)' : 'Frozen XGBoost Inference (Exp A)'}</span>
                     </span>
                     {riskData.ml_inference && (
                       <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-primary-500/10 text-primary-300 border border-primary-500/20">
-                        {riskData.ml_inference.model_version || 'expA'}
+                        {riskData.ml_inference.model_version || (isSessionExpB ? '1.0.0-candidate' : '3.4.1')}
                       </span>
                     )}
                   </div>
@@ -363,7 +470,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
 
                       <div className="flex justify-between items-center text-slate-300">
                         <span className="text-slate-400">
-                          {riskData.ml_inference.active_model === 'experiment_b'
+                          {isSessionExpB
                             ? 'Kinematic Risk (Human):'
                             : 'Uncalibrated Score (Human):'}
                         </span>
@@ -376,7 +483,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
 
                       <div className="flex justify-between items-center text-slate-300">
                         <span className="text-slate-400">
-                          {riskData.ml_inference.active_model === 'experiment_b'
+                          {isSessionExpB
                             ? 'Kinematic Risk (Auto):'
                             : 'Uncalibrated Score (Auto):'}
                         </span>
@@ -410,25 +517,27 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                   <div className="pt-2 border-t border-border/50 text-[11px] text-slate-400 flex items-start space-x-1.5">
                     <Info className="w-3.5 h-3.5 text-primary-400 shrink-0 mt-0.5" />
                     <span>
-                      <strong>Distinction:</strong> Predicted class is computed strictly from the 64-feature vector. It is reported separately from the intended test scenario.
+                      <strong>Distinction:</strong> Predicted class is computed strictly from the {isSessionExpB ? '12-feature kinematic vector' : '64-feature vector'}. It is reported separately from the intended test scenario.
                     </span>
                   </div>
                 </div>
               </div>
 
-              {/* STAGE 6.1 TASK 2: Semantically Accurate SHAP Tree Feature Explainability Breakdown */}
+              {/* STAGE 6.1 TASK 2: Model Explainability Breakdown */}
               <div className="p-4 rounded-xl bg-surface-elevated/40 border border-border/80 space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-border/60 gap-1">
                   <div>
                     <span className="text-xs font-bold uppercase tracking-wider text-slate-200 flex items-center space-x-1.5">
                       <Sparkles className="w-3.5 h-3.5 text-primary-400" />
-                      <span>Contributing Behavioral Features (SHAP Model Attributions)</span>
+                      <span>{isSessionExpB ? 'Feature Attributions & Explainability (Experiment B)' : 'Contributing Behavioral Features (SHAP Model Attributions)'}</span>
                     </span>
                     <p className="text-[10px] text-slate-400 mt-0.5">
-                      SHAP values represent tree-split contributions to the model&apos;s log-odds score, not causal proof of user identity or intent.
+                      {isSessionExpB
+                        ? 'Tree SHAP feature attributions are unavailable for Experiment B to prevent cross-model explanation leakage.'
+                        : 'SHAP values represent tree-split contributions to the model\'s log-odds score, not causal proof of user identity or intent.'}
                     </p>
                   </div>
-                  {explanationData && explanationData.ml_inference?.status === 'available' && (
+                  {!isSessionExpB && explanationData && explanationData.ml_inference?.status === 'available' && (
                     <span className="text-[10px] font-mono text-slate-400 shrink-0">
                       Non-Zero Contributors: {nonzeroContribs.length}
                     </span>
@@ -440,6 +549,14 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                   <div className="p-4 rounded-lg bg-surface/60 border border-border/50 text-slate-400 text-xs flex items-center space-x-2">
                     <Loader2 className="w-4 h-4 text-primary-400 animate-spin shrink-0" />
                     <span>Loading feature explanations...</span>
+                  </div>
+                ) : isSessionExpB ? (
+                  /* Experiment B state: Tree SHAP suppressed */
+                  <div className="p-3.5 rounded-lg bg-surface/60 border border-border/50 text-slate-300 text-xs flex items-center space-x-2">
+                    <HelpCircle className="w-4 h-4 text-purple-400 shrink-0" />
+                    <span>
+                      Feature attribution explanations are not currently supported for Experiment B (Kinematic Classifier). Tree SHAP values are intentionally unavailable to prevent cross-model attribution leakage.
+                    </span>
                   </div>
                 ) : !explanationData || explanationData.ml_inference?.status !== 'available' ? (
                   /* State 2: Explanation unavailable or failed */

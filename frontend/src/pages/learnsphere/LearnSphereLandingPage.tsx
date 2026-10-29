@@ -255,7 +255,7 @@ export const LearnSphereLandingPage: React.FC<LearnSphereLandingPageProps> = ({
     if (!currentId) return;
 
     setSessionActionLoading(true);
-    setSessionNotice('Ending session, computing 64-feature vector & evaluating frozen XGBoost inference...');
+    setSessionNotice('Ending session, computing behavioral feature vector & evaluating active model inference...');
     try {
       await sdk.flush();
       const endRes = await sdk.stop(intendedScenario === 'synthetic_automation' ? 'AUTOMATED_SIMULATION_COMPLETED' : 'MANUAL_SESSION_COMPLETED');

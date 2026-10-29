@@ -3,6 +3,7 @@ import {
   DashboardStats,
   RiskResponse,
   ExplanationResponse,
+  ModelStatusResponse,
   ProductListResponse,
   ProductDetailResponse,
   SearchResponse,
@@ -49,7 +50,7 @@ export const apiClient = {
     return res.json();
   },
 
-  async getModelStatus(): Promise<Record<string, any>> {
+  async getModelStatus(): Promise<ModelStatusResponse> {
     const res = await fetch(`${API_BASE}/model/status`);
     if (!res.ok) throw new Error('Failed to fetch model status');
     return res.json();

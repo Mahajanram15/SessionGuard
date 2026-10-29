@@ -7,6 +7,31 @@ export interface HealthResponse {
   components: Record<string, string>;
 }
 
+export interface ModelCandidateSummary {
+  status: 'available' | 'unavailable';
+  model_name: string;
+  model_version?: string | null;
+  feature_count: number;
+  artifact_sha256?: string | null;
+  error?: string | null;
+}
+
+export interface ModelStatusResponse {
+  status: 'available' | 'unavailable';
+  active_model: string;
+  model_name: string;
+  model_type?: string | null;
+  model_version?: string | null;
+  score_label: string;
+  decision_threshold: number;
+  feature_count: number;
+  artifact_sha256?: string | null;
+  model_path?: string | null;
+  manifest_path?: string | null;
+  error?: string | null;
+  available_models?: Record<string, ModelCandidateSummary>;
+}
+
 export interface RiskSignals {
   browser_score: number;
   api_anomaly_score: number;
